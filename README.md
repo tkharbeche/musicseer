@@ -114,8 +114,8 @@ See `docker/init.sql` for complete schema.
 ## Roadmap
 
 - [x] Phase 0: Environment & Infrastructure
-- [ ] Phase 1: MVP & Connectivity
-- [ ] Phase 2: Sync & Intelligence
+- [x] Phase 1: MVP & Connectivity
+- [x] Phase 2: Sync & Intelligence
 - [ ] Phase 3: UX & Admin
 - [ ] Phase 4: Extensions (Jellyfin support)
 
