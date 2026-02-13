@@ -1,0 +1,28 @@
+{
+  "name": "musicseer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MusicSeer - Open-source music discovery and request manager (Overseerr for music)",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter './apps/*' dev",
+    "build": "pnpm --filter './apps/*' build",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f",
+    "docker:build": "docker-compose build"
+  },
+  "keywords": [
+    "music",
+    "discovery",
+    "lidarr",
+    "navidrome",
+    "overseerr",
+    "music-manager"
+  ],
+  "author": "",
+  "license": "MIT"
+}
