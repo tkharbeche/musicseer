@@ -17,6 +17,6 @@ import { LibrarySnapshot } from '../sync/entities/library-snapshot.entity';
     imports: [TypeOrmModule.forFeature([ArtistCache, TrendingCache, SimilarityCache, LibrarySnapshot])],
     controllers: [DiscoveryController, RecommendationController],
     providers: [LastfmService, MusicbrainzService, TrendingService, SimilarityService, RecommendationService],
-    exports: [TrendingService, LastfmService, SimilarityService, RecommendationService],
+    exports: [TrendingService, LastfmService, SimilarityService, RecommendationService, MusicbrainzService],
 })
 export class DiscoveryModule { }

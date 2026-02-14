@@ -66,6 +66,24 @@ export class InstancesService {
         return mapping.server;
     }
 
+    async findById(id: string): Promise<ServerInstance> {
+        const instance = await this.instanceRepository.findOne({
+            where: { id },
+        });
+
+        if (!instance) {
+            throw new NotFoundException('Server instance not found');
+        }
+
+        return instance;
+    }
+
+    async findAnyActiveByType(type: 'navidrome' | 'lidarr' | 'jellyfin'): Promise<ServerInstance | null> {
+        return this.instanceRepository.findOne({
+            where: { type, isActive: true },
+        });
+    }
+
     async update(userId: string, id: string, updateInstanceDto: UpdateInstanceDto): Promise<ServerInstance> {
         const instance = await this.findOne(userId, id);
 
