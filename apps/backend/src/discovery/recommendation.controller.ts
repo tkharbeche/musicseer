@@ -10,8 +10,9 @@ export class RecommendationController {
     @Get('recommendations')
     async getRecommendations(
         @Request() req: any,
-        @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number
+        @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
+        @Query('serverId') serverId?: string
     ) {
-        return this.recommendationService.getRecommendations(req.user.userId, limit);
+        return this.recommendationService.getRecommendations(req.user.id, limit, serverId);
     }
 }

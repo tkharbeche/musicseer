@@ -5,6 +5,7 @@ import { LibrarySnapshot } from '../../sync/entities/library-snapshot.entity';
 import { SimilarityService } from './similarity.service';
 import { TrendingService } from './trending.service';
 import { LastfmService } from './lastfm.service';
+import { ArtistCache } from '../entities/artist-cache.entity';
 
 @Injectable()
 export class RecommendationService {
@@ -19,6 +20,8 @@ export class RecommendationService {
     constructor(
         @InjectRepository(LibrarySnapshot)
         private readonly librarySnapshotRepository: Repository<LibrarySnapshot>,
+        @InjectRepository(ArtistCache)
+        private readonly artistCacheRepository: Repository<ArtistCache>,
         private readonly similarityService: SimilarityService,
         private readonly trendingService: TrendingService,
         private readonly lastfmService: LastfmService,
@@ -27,12 +30,17 @@ export class RecommendationService {
     /**
      * Generate recommendations for a user
      */
-    async getRecommendations(userId: string, limit: number = 20): Promise<any[]> {
-        this.logger.log(`Generating recommendations for user ${userId}`);
+    async getRecommendations(userId: string, limit: number = 20, serverId?: string): Promise<any[]> {
+        this.logger.log(`Generating recommendations for user ${userId}${serverId ? ` filtered by server ${serverId}` : ''}`);
 
         // 1. Get User's Library Snapshot (Top 50 played)
+        const whereClause: any = { userId };
+        if (serverId) {
+            whereClause.serverId = serverId;
+        }
+
         const userLibrary = await this.librarySnapshotRepository.find({
-            where: { userId },
+            where: whereClause,
             order: { playCount: 'DESC' },
             take: 50
         });
@@ -86,18 +94,46 @@ export class RecommendationService {
         this.logger.debug(`Total candidates found: ${candidates.size}`);
 
         // 3. Scoring
+        const candidateNames = Array.from(candidates.keys());
+        const candidateMbids = Array.from(candidates.values())
+            .map(c => c.mbid)
+            .filter(mbid => !!mbid);
+
+        // Bulk fetch artist data to avoid N+1 query bottleneck
+        const artistCacheData = await this.artistCacheRepository.find({
+            where: [
+                { mbid: In(candidateMbids) },
+                { name: In(candidateNames) }
+            ]
+        });
+
+        // Create a lookup map for faster access
+        const artistDataMap = new Map<string, ArtistCache>();
+        artistCacheData.forEach(data => {
+            if (data.mbid) artistDataMap.set(data.mbid, data);
+            artistDataMap.set(data.name.toLowerCase(), data);
+        });
+
         const scoredCandidates = Array.from(candidates.values()).map(candidate => {
             // Normalize Similarity (0-1) - Average based on occurrences
-            const avgSimilarity = candidate.similarityScore / candidate.occurrences;
+            const avgSimilarity = Math.min(candidate.similarityScore / candidate.occurrences, 1);
 
-            // Global Popularity (Mocked for now)
-            const popularityScore = 0.5;
+            // Fetch artist data from our lookup map
+            let popularityScore = 0.5;
+            let diversityScore = 0.5;
 
-            // Genre Diversity (MVP: 0.5 default)
-            const diversityScore = 0.5;
+            const artistData = (candidate.mbid && artistDataMap.get(candidate.mbid)) ||
+                             artistDataMap.get(candidate.name.toLowerCase());
 
-            // Freshness (MVP: 0.5 default)
-            const freshnessScore = 0.5;
+            if (artistData) {
+                // Popularity Score: Normalized Last.fm listeners (0 to 1)
+                // Using log scale for better distribution, assuming 5M listeners as "max" for normalization
+                const listeners = Number(artistData.lastfmListeners) || 0;
+                popularityScore = Math.min(Math.log10(listeners + 1) / Math.log10(5000000), 1);
+            }
+
+            // Freshness: Random small factor to vary results slightly
+            const freshnessScore = Math.random();
 
             // Final Weighted Score
             const finalScore =
@@ -109,6 +145,7 @@ export class RecommendationService {
             return {
                 ...candidate,
                 score: finalScore,
+                imageUrl: artistData?.imageUrl || (candidate.image ? candidate.image.find((img: any) => img.size === 'large')?.['#text'] : null),
                 reason: `Similar to ${candidate.seedArtists.slice(0, 3).join(', ')}`
             };
         });

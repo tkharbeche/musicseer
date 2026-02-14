@@ -62,7 +62,7 @@ export class SimilarityService {
         } else {
             const newCache = new SimilarityCache();
             newCache.sourceArtistName = artistName;
-            newCache.sourceMbid = mbid || null;
+            if (mbid) newCache.sourceMbid = mbid;
             newCache.similarArtistData = formattedData;
             await this.similarityCacheRepository.save(newCache);
         }
