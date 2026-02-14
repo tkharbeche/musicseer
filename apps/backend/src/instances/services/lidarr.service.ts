@@ -40,6 +40,63 @@ export class LidarrService {
     }
 
     /**
+     * Get root folders from Lidarr
+     */
+    async getRootFolders(baseUrl: string, apiKey: string): Promise<any[]> {
+        try {
+            const response = await axios.get(`${baseUrl}/api/v1/rootfolder`, {
+                headers: { 'X-Api-Key': apiKey }
+            });
+            return response.data || [];
+        } catch (error) {
+            return [];
+        }
+    }
+
+    /**
+     * Get quality profiles from Lidarr
+     */
+    async getQualityProfiles(baseUrl: string, apiKey: string): Promise<any[]> {
+        try {
+            const response = await axios.get(`${baseUrl}/api/v1/qualityprofile`, {
+                headers: { 'X-Api-Key': apiKey }
+            });
+            return response.data || [];
+        } catch (error) {
+            return [];
+        }
+    }
+
+    /**
+     * Get metadata profiles from Lidarr
+     */
+    async getMetadataProfiles(baseUrl: string, apiKey: string): Promise<any[]> {
+        try {
+            const response = await axios.get(`${baseUrl}/api/v1/metadataprofile`, {
+                headers: { 'X-Api-Key': apiKey }
+            });
+            return response.data || [];
+        } catch (error) {
+            return [];
+        }
+    }
+
+    /**
+     * Lookup artist in Lidarr by term (name or lidarr:mbid)
+     */
+    async lookupArtist(baseUrl: string, apiKey: string, term: string): Promise<any[]> {
+        try {
+            const response = await axios.get(`${baseUrl}/api/v1/artist/lookup`, {
+                params: { term },
+                headers: { 'X-Api-Key': apiKey }
+            });
+            return response.data || [];
+        } catch (error) {
+            return [];
+        }
+    }
+
+    /**
      * Add artist to Lidarr
      */
     async addArtist(
@@ -55,20 +112,49 @@ export class LidarrService {
         },
     ): Promise<any> {
         try {
+            // 1. Lookup artist to get required metadata
+            const lookupResults = await this.lookupArtist(baseUrl, apiKey, `lidarr:${artistData.foreignArtistId}`);
+            const lidarrArtistMetadata = lookupResults.find(a => a.foreignArtistId === artistData.foreignArtistId) || lookupResults[0];
+
+            if (!lidarrArtistMetadata) {
+                throw new Error(`Could not find artist metadata in Lidarr for MBID: ${artistData.foreignArtistId}`);
+            }
+
+            // 2. Fetch defaults if not provided
+            let { qualityProfileId, metadataProfileId, rootFolderPath } = artistData;
+
+            if (!qualityProfileId) {
+                const profiles = await this.getQualityProfiles(baseUrl, apiKey);
+                qualityProfileId = profiles.length > 0 ? profiles[0].id : 1;
+            }
+
+            if (!metadataProfileId) {
+                const profiles = await this.getMetadataProfiles(baseUrl, apiKey);
+                metadataProfileId = profiles.length > 0 ? profiles[0].id : 1;
+            }
+
+            if (!rootFolderPath) {
+                const folders = await this.getRootFolders(baseUrl, apiKey);
+                rootFolderPath = folders.length > 0 ? folders[0].path : '/music';
+            }
+
+            // 3. Prepare payload using Lidarr's expected structure
+            const payload = {
+                ...lidarrArtistMetadata,
+                qualityProfileId,
+                metadataProfileId,
+                rootFolderPath,
+                monitored: artistData.monitored ?? true,
+                addOptions: {
+                    searchForMissingAlbums: true,
+                    monitor: 'all'
+                }
+            };
+
             const url = `${baseUrl}/api/v1/artist`;
             const response = await axios.post(
                 url,
-                {
-                    foreignArtistId: artistData.foreignArtistId,
-                    artistName: artistData.artistName,
-                    qualityProfileId: artistData.qualityProfileId || 1,
-                    metadataProfileId: artistData.metadataProfileId || 1,
-                    rootFolderPath: artistData.rootFolderPath || '/music',
-                    monitored: artistData.monitored ?? true,
-                    addOptions: {
-                        searchForMissingAlbums: true,
-                    },
-                },
+                payload,
                 {
                     headers: {
                         'X-Api-Key': apiKey,
@@ -79,12 +165,17 @@ export class LidarrService {
 
             return response.data;
         } catch (error) {
-            if (error.response?.status === 400 && error.response?.data?.includes('already exists')) {
+            const errorData = error.response?.data;
+            const errorMessage = Array.isArray(errorData)
+                ? errorData.map(e => e.errorMessage || e.message).join(', ')
+                : (typeof errorData === 'string' ? errorData : error.message);
+
+            if (error.response?.status === 400 && errorMessage.toLowerCase().includes('already exists')) {
                 throw new HttpException('Artist already exists in Lidarr', HttpStatus.CONFLICT);
             }
 
             throw new HttpException(
-                `Failed to add artist to Lidarr: ${error.message}`,
+                `Failed to add artist to Lidarr: ${errorMessage}`,
                 HttpStatus.BAD_REQUEST,
             );
         }
