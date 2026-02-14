@@ -142,10 +142,18 @@ export class RecommendationService {
                 (diversityScore * this.WEIGHT_DIVERSITY) +
                 (freshnessScore * this.WEIGHT_FRESHNESS);
 
+            let imageUrl = artistData?.imageUrl || null;
+            if (!imageUrl && candidate.image) {
+                const lastfmImg = candidate.image.find((img: any) => img.size === 'large')?.['#text'];
+                if (lastfmImg && !lastfmImg.includes('2a96cbd8b46e442fc41c2b86b821562f')) {
+                    imageUrl = lastfmImg;
+                }
+            }
+
             return {
                 ...candidate,
                 score: finalScore,
-                imageUrl: artistData?.imageUrl || (candidate.image ? candidate.image.find((img: any) => img.size === 'large')?.['#text'] : null),
+                imageUrl,
                 reason: `Similar to ${candidate.seedArtists.slice(0, 3).join(', ')}`
             };
         });

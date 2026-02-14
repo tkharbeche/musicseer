@@ -130,7 +130,14 @@ export class TrendingService {
         if (lastfmArtist.image && lastfmArtist.image.length > 0) {
             const largeImage = lastfmArtist.image.find((img: any) => img.size === 'extralarge') ||
                 lastfmArtist.image[lastfmArtist.image.length - 1];
-            artistCache.imageUrl = largeImage['#text'] || null;
+            const imageUrl = largeImage['#text'] || undefined;
+
+            // Filter out Last.fm default "no image" placeholder
+            if (imageUrl && imageUrl.includes('2a96cbd8b46e442fc41c2b86b821562f')) {
+                artistCache.imageUrl = undefined;
+            } else {
+                artistCache.imageUrl = imageUrl;
+            }
         }
 
         // Fetch MusicBrainz data if MBID exists
