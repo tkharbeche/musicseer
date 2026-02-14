@@ -17,7 +17,16 @@ export class RequestsService {
     ) { }
 
     async create(userId: string, createRequestDto: CreateRequestDto): Promise<Request> {
-        const { artistName, artistMbid, albumName, albumMbid, targetServerId } = createRequestDto;
+        let { artistName, artistMbid, albumName, albumMbid, targetServerId } = createRequestDto;
+
+        // If targetServerId is not provided, try to find a default Lidarr instance for the user
+        if (!targetServerId) {
+            const instances = await this.instancesService.findAll(userId);
+            const lidarrInstances = instances.filter(i => i.type === 'lidarr' && i.isActive);
+            if (lidarrInstances.length === 1) {
+                targetServerId = lidarrInstances[0].id;
+            }
+        }
 
         // Check for duplicate requests
         const existing = await this.requestRepository.findOne({
@@ -96,6 +105,10 @@ export class RequestsService {
             request.adminNotes = updateStatusDto.adminNotes;
         }
 
+        if (updateStatusDto.targetServerId) {
+            request.targetServerId = updateStatusDto.targetServerId;
+        }
+
         return this.requestRepository.save(request);
     }
 
@@ -110,7 +123,20 @@ export class RequestsService {
             throw new HttpException('Request must be approved before submission', HttpStatus.BAD_REQUEST);
         }
 
-        if (!request.targetServerId) {
+        let targetServerId = request.targetServerId;
+
+        // If targetServerId is missing, try to find an active Lidarr instance for the user
+        if (!targetServerId) {
+            const instances = await this.instancesService.findAll(request.userId);
+            const lidarrInstances = instances.filter(i => i.type === 'lidarr' && i.isActive);
+            if (lidarrInstances.length > 0) {
+                targetServerId = lidarrInstances[0].id;
+                request.targetServerId = targetServerId;
+                await this.requestRepository.save(request);
+            }
+        }
+
+        if (!targetServerId) {
             throw new HttpException('No target Lidarr server configured', HttpStatus.BAD_REQUEST);
         }
 
@@ -120,7 +146,7 @@ export class RequestsService {
 
         try {
             // Get Lidarr instance
-            const instance = await this.instancesService.findOne(request.userId, request.targetServerId);
+            const instance = await this.instancesService.findOne(request.userId, targetServerId!);
 
             if (instance.type !== 'lidarr') {
                 throw new HttpException('Target server is not a Lidarr instance', HttpStatus.BAD_REQUEST);

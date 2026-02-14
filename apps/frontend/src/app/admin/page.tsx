@@ -34,6 +34,8 @@ export default function AdminPage() {
 
 function RequestsManager() {
     const queryClient = useQueryClient();
+    const [selectedServers, setSelectedServers] = useState<Record<string, string>>({});
+
     const { data: requests, isLoading } = useQuery<MusicRequest[]>(
         'admin-requests',
         async () => {
@@ -42,9 +44,19 @@ function RequestsManager() {
         }
     );
 
+    const { data: servers } = useQuery<ServerInstance[]>(
+        'admin-servers',
+        async () => {
+            const res = await api.get('/instances');
+            return res.data;
+        }
+    );
+
+    const lidarrServers = servers?.filter(s => s.type === 'lidarr' && s.isActive) || [];
+
     const updateStatusMutation = useMutation(
-        async ({ id, status }: { id: string, status: string }) => {
-            return api.put(`/requests/${id}/status`, { status });
+        async ({ id, status, targetServerId }: { id: string, status: string, targetServerId?: string }) => {
+            return api.put(`/requests/${id}/status`, { status, targetServerId });
         },
         {
             onSuccess: () => {
@@ -102,10 +114,26 @@ function RequestsManager() {
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                 {req.status === 'pending' && (
-                                    <>
+                                    <div className="flex items-center justify-end space-x-4">
+                                        {lidarrServers.length > 1 && !req.targetServerId && (
+                                            <select
+                                                className="text-xs rounded border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800"
+                                                value={selectedServers[req.id] || ''}
+                                                onChange={(e) => setSelectedServers({...selectedServers, [req.id]: e.target.value})}
+                                            >
+                                                <option value="">Select Lidarr</option>
+                                                {lidarrServers.map(s => (
+                                                    <option key={s.id} value={s.id}>{s.name}</option>
+                                                ))}
+                                            </select>
+                                        )}
                                         <button
-                                            onClick={() => updateStatusMutation.mutate({ id: req.id, status: 'approved' })}
-                                            className="text-indigo-600 hover:text-indigo-900 mr-4"
+                                            onClick={() => updateStatusMutation.mutate({
+                                                id: req.id,
+                                                status: 'approved',
+                                                targetServerId: selectedServers[req.id] || req.targetServerId
+                                            })}
+                                            className="text-indigo-600 hover:text-indigo-900"
                                         >
                                             Approve
                                         </button>
@@ -115,7 +143,7 @@ function RequestsManager() {
                                         >
                                             Reject
                                         </button>
-                                    </>
+                                    </div>
                                 )}
                                 {req.status === 'approved' && (
                                     <button

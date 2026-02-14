@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Not, In } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { LibrarySnapshot } from '../../sync/entities/library-snapshot.entity';
 import { SimilarityService } from './similarity.service';
 import { TrendingService } from './trending.service';

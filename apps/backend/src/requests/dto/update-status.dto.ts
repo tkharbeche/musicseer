@@ -1,4 +1,4 @@
-import { IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class UpdateStatusDto {
     @IsEnum(['pending', 'approved', 'rejected', 'sent', 'completed', 'failed'])
@@ -7,4 +7,8 @@ export class UpdateStatusDto {
     @IsOptional()
     @IsString()
     adminNotes?: string;
+
+    @IsOptional()
+    @IsUUID()
+    targetServerId?: string;
 }
