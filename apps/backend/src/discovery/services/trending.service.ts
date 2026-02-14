@@ -236,6 +236,28 @@ export class TrendingService implements OnModuleInit {
             }
         }
 
+        // --- STEP D: MusicBrainz Release Image Fallback ---
+        if (!imageUrl && currentMbid && artistCache.musicbrainzData?.releases) {
+            try {
+                // Find latest releases with a date
+                const releases = artistCache.musicbrainzData.releases
+                    .filter((r: any) => r.date)
+                    .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+                // Try top 3 latest releases
+                for (const release of releases.slice(0, 3)) {
+                    const releaseImg = await this.musicbrainzService.getReleaseImageUrl(release.id);
+                    if (releaseImg) {
+                        imageUrl = releaseImg;
+                        this.logger.debug(`Enriched ${lastfmArtist.name} image from MB Release: ${release.title}`);
+                        break;
+                    }
+                }
+            } catch (err) {
+                this.logger.warn(`MB Release image enrichment failed for ${lastfmArtist.name}`);
+            }
+        }
+
         artistCache.imageUrl = imageUrl || undefined;
         artistCache.lastSyncedAt = new Date();
         await this.artistCacheRepository.save(artistCache);
