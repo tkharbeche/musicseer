@@ -8,6 +8,12 @@ export class ArtistCache {
     @Column({ type: 'uuid', nullable: true, unique: true })
     mbid?: string;
 
+    @Column({ type: 'float', default: 0, name: 'popularity_score' })
+    popularityScore: number;
+
+    @Column({ type: 'timestamp', nullable: true, name: 'latest_release_date' })
+    latestReleaseDate?: Date;
+
     @Column({ length: 500 })
     name: string;
 

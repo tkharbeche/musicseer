@@ -10,6 +10,7 @@ export interface MusicBrainzArtist {
     disambiguation?: string;
     tags?: { count: number; name: string }[];
     relations?: any[];
+    'release-groups'?: any[];
 }
 
 @Injectable()
@@ -34,10 +35,10 @@ export class MusicbrainzService {
             const response = await axios.get(`${this.baseUrl}/artist/${mbid}`, {
                 params: {
                     fmt: 'json',
-                    inc: 'tags+ratings+genres',
+                    inc: 'tags+ratings+genres+release-groups',
                 },
                 headers: {
-                    'User-Agent': `${this.appName}/${this.appVersion} ( ${this.contact} )`,
+                    'User-Agent': `${this.appName}/${this.appVersion} ( ${this.contact || 'admin@musicseer.local'} )`,
                 },
             });
 
@@ -75,6 +76,25 @@ export class MusicbrainzService {
             this.logger.error(`Failed to search MusicBrainz for "${artistName}": ${error.message}`);
             return [];
         }
+    }
+
+    /**
+     * Helper to find the latest release date from an artist's release groups
+     */
+    getLatestReleaseDate(artist: MusicBrainzArtist): Date | null {
+        if (!artist['release-groups'] || artist['release-groups'].length === 0) {
+            return null;
+        }
+
+        const dates = artist['release-groups']
+            .map(rg => rg['first-release-date'])
+            .filter(date => !!date)
+            .map(date => new Date(date))
+            .filter(date => !isNaN(date.getTime()));
+
+        if (dates.length === 0) return null;
+
+        return new Date(Math.max(...dates.map(d => d.getTime())));
     }
 
     private delay(ms: number): Promise<void> {

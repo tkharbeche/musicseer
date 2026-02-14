@@ -114,26 +114,73 @@ export class RecommendationService {
             artistDataMap.set(data.name.toLowerCase(), data);
         });
 
-        const scoredCandidates = Array.from(candidates.values()).map(candidate => {
-            // Normalize Similarity (0-1) - Average based on occurrences
-            const avgSimilarity = Math.min(candidate.similarityScore / candidate.occurrences, 1);
+        // --- Pre-calculate User Library Genre Distribution for Diversity Bonus ---
+        const userGenres = new Map<string, number>();
+        let totalUserGenres = 0;
 
-            // Fetch artist data from our lookup map
-            let popularityScore = 0.5;
-            let diversityScore = 0.5;
+        // We'll need MB data for library artists to get their genres
+        // For now, we'll use whatever is in the ArtistCache for library artists
+        const libraryArtistNamesList = userLibrary.map(item => item.artistName);
+        const libraryArtistCache = await this.artistCacheRepository.find({
+            where: { name: In(libraryArtistNamesList) }
+        });
+
+        libraryArtistCache.forEach(artist => {
+            if (artist.genres) {
+                artist.genres.forEach(genre => {
+                    const normalized = genre.toLowerCase();
+                    userGenres.set(normalized, (userGenres.get(normalized) || 0) + 1);
+                    totalUserGenres++;
+                });
+            }
+        });
+
+        const scoredCandidates = Array.from(candidates.values()).map(candidate => {
+            // 1. Normalize Similarity (30% weight)
+            const avgSimilarity = Math.min(candidate.similarityScore / candidate.occurrences, 1);
 
             const artistData = (candidate.mbid && artistDataMap.get(candidate.mbid)) ||
                              artistDataMap.get(candidate.name.toLowerCase());
 
-            if (artistData) {
-                // Popularity Score: Normalized Last.fm listeners (0 to 1)
-                // Using log scale for better distribution, assuming 5M listeners as "max" for normalization
-                const listeners = Number(artistData.lastfmListeners) || 0;
-                popularityScore = Math.min(Math.log10(listeners + 1) / Math.log10(5000000), 1);
+            // 2. Popularity Score (40% weight)
+            let popularityScore = artistData?.popularityScore || 0;
+            if (!artistData && !popularityScore) {
+                // Fallback for new artists not in cache yet
+                popularityScore = 0.1;
             }
 
-            // Freshness: Random small factor to vary results slightly
-            const freshnessScore = Math.random();
+            // 3. Genre Diversity Score (20% weight)
+            // Bonus for genres underrepresented in user library
+            let diversityScore = 0.5;
+            if (artistData?.genres && totalUserGenres > 0) {
+                let underrepresentedCount = 0;
+                artistData.genres.forEach((genre: string) => {
+                    const normalized = genre.toLowerCase();
+                    const userCount = userGenres.get(normalized) || 0;
+                    const userFrequency = userCount / totalUserGenres;
+
+                    // If this genre represents less than 5% of their library, it's "diverse"
+                    if (userFrequency < 0.05) {
+                        underrepresentedCount++;
+                    }
+                });
+                diversityScore = Math.min(underrepresentedCount / artistData.genres.length + 0.2, 1);
+            }
+
+            // 4. Freshness Score (10% weight)
+            // Based on latest release date from MusicBrainz
+            let freshnessScore = 0.5;
+            if (artistData?.latestReleaseDate) {
+                const releaseDate = new Date(artistData.latestReleaseDate);
+                const now = new Date();
+                const diffMonths = (now.getFullYear() - releaseDate.getFullYear()) * 12 + (now.getMonth() - releaseDate.getMonth());
+
+                // Newest (0-6 months) = 1.0, Older (> 5 years) = 0.1
+                freshnessScore = Math.max(1 - (diffMonths / 60), 0.1);
+            } else {
+                // Random small factor for variety if no date available
+                freshnessScore = 0.3 + (Math.random() * 0.2);
+            }
 
             // Final Weighted Score
             const finalScore =

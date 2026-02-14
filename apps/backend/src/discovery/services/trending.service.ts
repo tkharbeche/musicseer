@@ -129,6 +129,7 @@ export class TrendingService implements OnModuleInit {
 
     /**
      * Update artist cache with Last.fm, MusicBrainz, and Lidarr data
+     * Strictly follows Step A-B-C pipeline from Enrichment Strategy
      */
     private async updateArtistCache(lastfmArtist: any): Promise<void> {
         let artistCache = await this.artistCacheRepository.findOne({
@@ -142,83 +143,100 @@ export class TrendingService implements OnModuleInit {
             });
         }
 
-        // Update Last.fm data
+        // --- STEP A: Initial Data (Last.fm) ---
         artistCache.lastfmPlaycount = parseInt(lastfmArtist.playcount || '0', 10);
         artistCache.lastfmListeners = parseInt(lastfmArtist.listeners || '0', 10);
 
-        // Extract initial image URL from Last.fm
-        let imageUrl: string | undefined = undefined;
-        if (lastfmArtist.image && lastfmArtist.image.length > 0) {
-            const largeImage = lastfmArtist.image.find((img: any) => img.size === 'extralarge') ||
-                lastfmArtist.image.find((img: any) => img.size === 'large') ||
-                lastfmArtist.image[lastfmArtist.image.length - 1];
-            imageUrl = largeImage['#text'] || undefined;
+        // Calculate Popularity Score (40% weight source)
+        // Using log scale for better distribution, assuming 5M listeners as "max"
+        const listeners = artistCache.lastfmListeners;
+        artistCache.popularityScore = Math.min(Math.log10(listeners + 1) / Math.log10(5000000), 1);
 
-            // Filter out Last.fm default "no image" placeholder
-            if (imageUrl && imageUrl.includes('2a96cbd8b46e442fc41c2b86b821562f')) {
-                imageUrl = undefined;
-            }
-        }
+        // --- STEP B: Identity Validation & Metadata (MusicBrainz) ---
+        let currentMbid = artistCache.mbid;
 
-        // Enrichment via Lidarr (often has better images from Fanart.tv)
-        try {
-            const lidarrInstance = await this.instancesService.findAnyActiveByType('lidarr');
-            if (lidarrInstance) {
-                const lookupTerm = lastfmArtist.mbid ? `lidarr:${lastfmArtist.mbid}` : lastfmArtist.name;
-                const lidarrArtists = await this.lidarrService.lookupArtist(lidarrInstance.baseUrl, lidarrInstance.apiKey, lookupTerm);
-                const lidarrMetadata = lastfmArtist.mbid
-                    ? lidarrArtists.find(a => a.foreignArtistId === lastfmArtist.mbid)
-                    : lidarrArtists[0];
-
-                if (lidarrMetadata && lidarrMetadata.images && lidarrMetadata.images.length > 0) {
-                    // Prioritize 'fanart' or 'poster' types from Lidarr
-                    const bestImg = lidarrMetadata.images.find((img: any) => img.coverType === 'fanart') ||
-                                    lidarrMetadata.images.find((img: any) => img.coverType === 'poster') ||
-                                    lidarrMetadata.images[0];
-
-                    if (bestImg && bestImg.url && bestImg.url.startsWith('http')) {
-                        imageUrl = bestImg.url;
-                        this.logger.debug(`Enriched ${lastfmArtist.name} image from Lidarr/Fanart`);
-                    }
-                }
-            }
-        } catch (err) {
-            this.logger.warn(`Failed to enrich ${lastfmArtist.name} from Lidarr: ${err.message}`);
-        }
-
-        // Final fallback: If still no image, try Last.fm Artist Info for more detailed metadata
-        if (!imageUrl) {
+        // If MBID is missing, search on MusicBrainz
+        if (!currentMbid) {
             try {
-                const artistInfo = await this.lastfmService.getArtistInfo(lastfmArtist.name, lastfmArtist.mbid);
-                if (artistInfo && artistInfo.image && artistInfo.image.length > 0) {
-                    const largeImage = artistInfo.image.find((img: any) => img.size === 'extralarge') ||
-                        artistInfo.image.find((img: any) => img.size === 'large');
-                    const infoImageUrl = largeImage?.['#text'];
-                    if (infoImageUrl && !infoImageUrl.includes('2a96cbd8b46e442fc41c2b86b821562f')) {
-                        imageUrl = infoImageUrl;
+                const mbSearchResults = await this.musicbrainzService.searchArtist(lastfmArtist.name);
+                if (mbSearchResults.length > 0) {
+                    currentMbid = mbSearchResults[0].id;
+                    artistCache.mbid = currentMbid;
+                    this.logger.debug(`Found MBID for ${lastfmArtist.name}: ${currentMbid}`);
+                }
+            } catch (err) {
+                this.logger.warn(`MB search failed for ${lastfmArtist.name}: ${err.message}`);
+            }
+        }
+
+        // Perform MB lookup for genres and release dates
+        if (currentMbid) {
+            try {
+                const mbData = await this.musicbrainzService.getArtistByMbid(currentMbid);
+                if (mbData) {
+                    artistCache.musicbrainzData = mbData;
+
+                    // Extract official genres
+                    if (mbData.tags) {
+                        artistCache.genres = mbData.tags.map((tag: any) => tag.name);
+                    }
+
+                    // Extract latest release date for Freshness (10% weight source)
+                    const latestDate = this.musicbrainzService.getLatestReleaseDate(mbData);
+                    if (latestDate) {
+                        artistCache.latestReleaseDate = latestDate;
                     }
                 }
             } catch (err) {
-                this.logger.warn(`Failed to get detailed Last.fm info for ${lastfmArtist.name}`);
+                this.logger.warn(`MB lookup failed for MBID ${currentMbid}: ${err.message}`);
+            }
+        }
+
+        // --- STEP C: Visual Content (Last.fm Info / Lidarr) ---
+        let imageUrl: string | undefined = undefined;
+
+        // Try Last.fm artist.getInfo first (often better images than bulk lists)
+        try {
+            const info = await this.lastfmService.getArtistInfo(lastfmArtist.name, currentMbid);
+            if (info && info.image && info.image.length > 0) {
+                const bestLastfm = info.image.find((img: any) => img.size === 'extralarge') ||
+                                 info.image.find((img: any) => img.size === 'large');
+                const candidate = bestLastfm?.['#text'];
+                if (candidate && !candidate.includes('2a96cbd8b46e442fc41c2b86b821562f')) {
+                    imageUrl = candidate;
+                }
+            }
+        } catch (err) {
+            this.logger.warn(`Last.fm getInfo failed for ${lastfmArtist.name}`);
+        }
+
+        // Lidarr Enrichment (Fanart.tv fallback)
+        if (!imageUrl || imageUrl.includes('lastfm')) { // Prefer Lidarr/Fanart if available
+            try {
+                const lidarrInstance = await this.instancesService.findAnyActiveByType('lidarr');
+                if (lidarrInstance) {
+                    const lookupTerm = currentMbid ? `lidarr:${currentMbid}` : lastfmArtist.name;
+                    const lidarrArtists = await this.lidarrService.lookupArtist(lidarrInstance.baseUrl, lidarrInstance.apiKey, lookupTerm);
+                    const lidarrMetadata = currentMbid
+                        ? lidarrArtists.find(a => a.foreignArtistId === currentMbid)
+                        : lidarrArtists[0];
+
+                    if (lidarrMetadata && lidarrMetadata.images && lidarrMetadata.images.length > 0) {
+                        const bestImg = lidarrMetadata.images.find((img: any) => img.coverType === 'fanart') ||
+                                        lidarrMetadata.images.find((img: any) => img.coverType === 'poster') ||
+                                        lidarrMetadata.images[0];
+
+                        if (bestImg && bestImg.url && bestImg.url.startsWith('http')) {
+                            imageUrl = bestImg.url;
+                        }
+                    }
+                }
+            } catch (err) {
+                this.logger.debug(`Lidarr enrichment skipped for ${lastfmArtist.name}`);
             }
         }
 
         artistCache.imageUrl = imageUrl || undefined;
-
-        // Fetch MusicBrainz data if MBID exists
-        if (lastfmArtist.mbid) {
-            const mbData = await this.musicbrainzService.getArtistByMbid(lastfmArtist.mbid);
-
-            if (mbData) {
-                artistCache.musicbrainzData = mbData;
-
-                // Extract genres from tags
-                if (mbData.tags) {
-                    artistCache.genres = mbData.tags.map((tag: any) => tag.name);
-                }
-            }
-        }
-
         artistCache.lastSyncedAt = new Date();
         await this.artistCacheRepository.save(artistCache);
     }
