@@ -17,6 +17,9 @@ export class TrendingCache {
     @Column({ length: 50, default: 'global', name: 'chart_type' })
     chartType: string;
 
+    @Column({ length: 1000, nullable: true, name: 'image_url' })
+    imageUrl?: string;
+
     @CreateDateColumn({ name: 'cached_at' })
     cachedAt: Date;
 }

@@ -8,6 +8,7 @@ import { LastfmService } from './lastfm.service';
 import { MusicbrainzService } from './musicbrainz.service';
 import { LidarrService } from '../../instances/services/lidarr.service';
 import { InstancesService } from '../../instances/instances.service';
+import { isImageDisplayable } from '../utils/image-validator';
 
 @Injectable()
 export class TrendingService implements OnModuleInit {
@@ -60,7 +61,7 @@ export class TrendingService implements OnModuleInit {
 
                 try {
                     // Update or create artist cache
-                    await this.updateArtistCache(artist);
+                    const artistCache = await this.updateArtistCache(artist);
 
                     // Create trending cache entry
                     await this.trendingCacheRepository.save({
@@ -68,6 +69,7 @@ export class TrendingService implements OnModuleInit {
                         artistName: artist.name,
                         rank: i + 1,
                         chartType: 'global',
+                        imageUrl: artistCache?.imageUrl,
                     });
                 } catch (error) {
                     this.logger.error(`Failed to process artist ${artist.name}: ${error.message}`);
@@ -107,7 +109,7 @@ export class TrendingService implements OnModuleInit {
                     });
                 }
 
-                let imageUrl = artistData?.imageUrl || null;
+                let imageUrl = t.imageUrl || artistData?.imageUrl || null;
                 if (imageUrl && imageUrl.includes('2a96cbd8b46e442fc41c2b86b821562f')) {
                     imageUrl = null;
                 }
@@ -131,7 +133,7 @@ export class TrendingService implements OnModuleInit {
      * Update artist cache with Last.fm, MusicBrainz, and Lidarr data
      * Strictly follows Step A-B-C pipeline from Enrichment Strategy
      */
-    private async updateArtistCache(lastfmArtist: any): Promise<void> {
+    private async updateArtistCache(lastfmArtist: any): Promise<ArtistCache | null> {
         let artistCache = await this.artistCacheRepository.findOne({
             where: lastfmArtist.mbid ? { mbid: lastfmArtist.mbid } : { name: lastfmArtist.name },
         });
@@ -258,8 +260,17 @@ export class TrendingService implements OnModuleInit {
             }
         }
 
+        // Validate image before saving
+        if (imageUrl) {
+            const isDisplayable = await isImageDisplayable(imageUrl);
+            if (!isDisplayable) {
+                this.logger.warn(`Image for ${lastfmArtist.name} is not displayable: ${imageUrl}`);
+                imageUrl = undefined;
+            }
+        }
+
         artistCache.imageUrl = imageUrl || undefined;
         artistCache.lastSyncedAt = new Date();
-        await this.artistCacheRepository.save(artistCache);
+        return await this.artistCacheRepository.save(artistCache);
     }
 }

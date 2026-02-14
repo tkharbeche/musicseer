@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { LibrarySnapshot } from '../../sync/entities/library-snapshot.entity';
 import { SimilarityService } from './similarity.service';
+import { isImageDisplayable } from '../utils/image-validator';
 import { TrendingService } from './trending.service';
 import { LastfmService } from './lastfm.service';
 import { ArtistCache } from '../entities/artist-cache.entity';
@@ -201,18 +202,29 @@ export class RecommendationService {
                 }
             }
 
-            return {
-                ...candidate,
-                score: finalScore,
-                imageUrl,
-                reason: `Similar to ${candidate.seedArtists.slice(0, 3).join(', ')}`
-            };
+            // Final check for displayable image if we just fetched it from Last.fm
+            // (artistData images are assumed validated during sync)
+            return (async () => {
+                if (imageUrl && !artistData) {
+                    const ok = await isImageDisplayable(imageUrl);
+                    if (!ok) imageUrl = null;
+                }
+
+                return {
+                    ...candidate,
+                    score: finalScore,
+                    imageUrl,
+                    reason: `Similar to ${candidate.seedArtists.slice(0, 3).join(', ')}`
+                };
+            })();
         });
 
-        this.logger.debug(`Scored candidates count: ${scoredCandidates.length}. Limit: ${limit} (type: ${typeof limit})`);
+        const resolvedScoredCandidates = await Promise.all(scoredCandidates);
+
+        this.logger.debug(`Scored candidates count: ${resolvedScoredCandidates.length}. Limit: ${limit} (type: ${typeof limit})`);
 
         // 4. Sort and Limit
-        const results = scoredCandidates
+        const results = resolvedScoredCandidates
             .sort((a, b) => b.score - a.score)
             .slice(0, limit);
 
