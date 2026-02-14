@@ -15,7 +15,8 @@
         "react-query": "^3.39.3",
         "axios": "^1.6.5",
         "clsx": "^2.1.0",
-        "tailwind-merge": "^2.2.0"
+        "tailwind-merge": "^2.2.0",
+        "@musicseer/shared-types": "workspace:*"
     },
     "devDependencies": {
         "@types/node": "^20.11.5",

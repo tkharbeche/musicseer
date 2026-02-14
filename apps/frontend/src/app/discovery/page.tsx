@@ -80,6 +80,11 @@ export default function DiscoveryPage() {
 }
 
 function ArtistCard({ artist, isRecommendation = false }: { artist: any, isRecommendation?: boolean }) {
+    // Filter out Last.fm placeholder image
+    const imageUrl = artist.imageUrl && !artist.imageUrl.includes('2a96cbd8b46e442fc41c2b86b821562f')
+        ? artist.imageUrl
+        : null;
+
     const handleRequest = async () => {
         try {
             await api.post('/requests/artist', {
@@ -94,11 +99,16 @@ function ArtistCard({ artist, isRecommendation = false }: { artist: any, isRecom
 
     return (
         <div className="bg-white dark:bg-gray-800 rounded-lg overflow-hidden shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow">
-            <div className="aspect-square bg-gray-200 dark:bg-gray-700 relative">
-                {artist.imageUrl ? (
-                    <img src={artist.imageUrl} alt={artist.name} className="object-cover w-full h-full" />
+            <div className="aspect-square bg-gray-200 dark:bg-gray-700 relative flex items-center justify-center overflow-hidden">
+                {imageUrl ? (
+                    <img src={imageUrl} alt={artist.name} className="object-cover w-full h-full" />
                 ) : (
-                    <div className="flex items-center justify-center h-full text-gray-400">No Image</div>
+                    <div className="flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 p-4 text-center">
+                        <svg className="w-12 h-12 mb-2 opacity-20" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z" />
+                        </svg>
+                        <span className="text-xs font-medium uppercase tracking-wider">{artist.name.charAt(0)}</span>
+                    </div>
                 )}
                 {isRecommendation && (
                     <div className="absolute top-2 right-2 bg-indigo-600 text-white text-xs px-2 py-1 rounded-full">

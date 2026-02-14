@@ -12,9 +12,13 @@ import { SimilarityService } from './services/similarity.service';
 import { RecommendationController } from './recommendation.controller';
 import { RecommendationService } from './services/recommendation.service';
 import { LibrarySnapshot } from '../sync/entities/library-snapshot.entity';
-// ...
+import { InstancesModule } from '../instances/instances.module';
+
 @Module({
-    imports: [TypeOrmModule.forFeature([ArtistCache, TrendingCache, SimilarityCache, LibrarySnapshot])],
+    imports: [
+        TypeOrmModule.forFeature([ArtistCache, TrendingCache, SimilarityCache, LibrarySnapshot]),
+        InstancesModule,
+    ],
     controllers: [DiscoveryController, RecommendationController],
     providers: [LastfmService, MusicbrainzService, TrendingService, SimilarityService, RecommendationService],
     exports: [TrendingService, LastfmService, SimilarityService, RecommendationService, MusicbrainzService],

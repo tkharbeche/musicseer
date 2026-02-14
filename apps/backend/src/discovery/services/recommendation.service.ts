@@ -143,6 +143,10 @@ export class RecommendationService {
                 (freshnessScore * this.WEIGHT_FRESHNESS);
 
             let imageUrl = artistData?.imageUrl || null;
+            if (imageUrl && imageUrl.includes('2a96cbd8b46e442fc41c2b86b821562f')) {
+                imageUrl = null;
+            }
+
             if (!imageUrl && candidate.image) {
                 const lastfmImg = candidate.image.find((img: any) => img.size === 'large')?.['#text'];
                 if (lastfmImg && !lastfmImg.includes('2a96cbd8b46e442fc41c2b86b821562f')) {

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
@@ -9,7 +9,7 @@ import { SubsonicService } from './subsonic.service';
 import { TrendingService } from '../../discovery/services/trending.service'; // For metadata access if needed
 
 @Injectable()
-export class LibrarySyncService {
+export class LibrarySyncService implements OnModuleInit {
     private readonly logger = new Logger(LibrarySyncService.name);
 
     constructor(
@@ -21,6 +21,17 @@ export class LibrarySyncService {
         private readonly userServerMappingRepository: Repository<UserServerMapping>,
         private readonly subsonicService: SubsonicService,
     ) { }
+
+    async onModuleInit() {
+        // Run sync on startup if snapshots are empty
+        const count = await this.librarySnapshotRepository.count();
+        if (count === 0) {
+            this.logger.log('Library snapshots empty, triggering initial sync...');
+            this.syncAllLibraries().catch(err =>
+                this.logger.error(`Initial library sync failed: ${err.message}`)
+            );
+        }
+    }
 
     /**
      * Cron job to sync libraries every 12 hours

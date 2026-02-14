@@ -119,6 +119,9 @@ importers:
 
   apps/frontend:
     dependencies:
+      '@musicseer/shared-types':
+        specifier: workspace:*
+        version: link:../../packages/shared-types
       axios:
         specifier: ^1.6.5
         version: 1.13.5

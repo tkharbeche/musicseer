@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
@@ -6,9 +6,11 @@ import { ArtistCache } from '../entities/artist-cache.entity';
 import { TrendingCache } from '../entities/trending-cache.entity';
 import { LastfmService } from './lastfm.service';
 import { MusicbrainzService } from './musicbrainz.service';
+import { LidarrService } from '../../instances/services/lidarr.service';
+import { InstancesService } from '../../instances/instances.service';
 
 @Injectable()
-export class TrendingService {
+export class TrendingService implements OnModuleInit {
     private readonly logger = new Logger(TrendingService.name);
 
     constructor(
@@ -18,7 +20,20 @@ export class TrendingService {
         private readonly trendingCacheRepository: Repository<TrendingCache>,
         private readonly lastfmService: LastfmService,
         private readonly musicbrainzService: MusicbrainzService,
+        private readonly lidarrService: LidarrService,
+        private readonly instancesService: InstancesService,
     ) { }
+
+    async onModuleInit() {
+        // Run sync on startup if cache is empty
+        const count = await this.trendingCacheRepository.count();
+        if (count === 0) {
+            this.logger.log('Cache empty, triggering initial trending sync...');
+            this.syncTrendingArtists().catch(err =>
+                this.logger.error(`Initial trending sync failed: ${err.message}`)
+            );
+        }
+    }
 
     /**
      * Cron job to sync trending artists every 6 hours
@@ -92,13 +107,18 @@ export class TrendingService {
                     });
                 }
 
+                let imageUrl = artistData?.imageUrl || null;
+                if (imageUrl && imageUrl.includes('2a96cbd8b46e442fc41c2b86b821562f')) {
+                    imageUrl = null;
+                }
+
                 return {
                     rank: t.rank,
                     name: t.artistName,
                     mbid: t.artistMbid,
                     playcount: artistData?.lastfmPlaycount || 0,
                     listeners: artistData?.lastfmListeners || 0,
-                    imageUrl: artistData?.imageUrl || null,
+                    imageUrl,
                     genres: artistData?.genres || [],
                 };
             }),
@@ -108,7 +128,7 @@ export class TrendingService {
     }
 
     /**
-     * Update artist cache with Last.fm and MusicBrainz data
+     * Update artist cache with Last.fm, MusicBrainz, and Lidarr data
      */
     private async updateArtistCache(lastfmArtist: any): Promise<void> {
         let artistCache = await this.artistCacheRepository.findOne({
@@ -126,19 +146,64 @@ export class TrendingService {
         artistCache.lastfmPlaycount = parseInt(lastfmArtist.playcount || '0', 10);
         artistCache.lastfmListeners = parseInt(lastfmArtist.listeners || '0', 10);
 
-        // Extract image URL (largest available)
+        // Extract initial image URL from Last.fm
+        let imageUrl: string | undefined = undefined;
         if (lastfmArtist.image && lastfmArtist.image.length > 0) {
             const largeImage = lastfmArtist.image.find((img: any) => img.size === 'extralarge') ||
+                lastfmArtist.image.find((img: any) => img.size === 'large') ||
                 lastfmArtist.image[lastfmArtist.image.length - 1];
-            const imageUrl = largeImage['#text'] || undefined;
+            imageUrl = largeImage['#text'] || undefined;
 
             // Filter out Last.fm default "no image" placeholder
             if (imageUrl && imageUrl.includes('2a96cbd8b46e442fc41c2b86b821562f')) {
-                artistCache.imageUrl = undefined;
-            } else {
-                artistCache.imageUrl = imageUrl;
+                imageUrl = undefined;
             }
         }
+
+        // Enrichment via Lidarr (often has better images from Fanart.tv)
+        try {
+            const lidarrInstance = await this.instancesService.findAnyActiveByType('lidarr');
+            if (lidarrInstance) {
+                const lookupTerm = lastfmArtist.mbid ? `lidarr:${lastfmArtist.mbid}` : lastfmArtist.name;
+                const lidarrArtists = await this.lidarrService.lookupArtist(lidarrInstance.baseUrl, lidarrInstance.apiKey, lookupTerm);
+                const lidarrMetadata = lastfmArtist.mbid
+                    ? lidarrArtists.find(a => a.foreignArtistId === lastfmArtist.mbid)
+                    : lidarrArtists[0];
+
+                if (lidarrMetadata && lidarrMetadata.images && lidarrMetadata.images.length > 0) {
+                    // Prioritize 'fanart' or 'poster' types from Lidarr
+                    const bestImg = lidarrMetadata.images.find((img: any) => img.coverType === 'fanart') ||
+                                    lidarrMetadata.images.find((img: any) => img.coverType === 'poster') ||
+                                    lidarrMetadata.images[0];
+
+                    if (bestImg && bestImg.url && bestImg.url.startsWith('http')) {
+                        imageUrl = bestImg.url;
+                        this.logger.debug(`Enriched ${lastfmArtist.name} image from Lidarr/Fanart`);
+                    }
+                }
+            }
+        } catch (err) {
+            this.logger.warn(`Failed to enrich ${lastfmArtist.name} from Lidarr: ${err.message}`);
+        }
+
+        // Final fallback: If still no image, try Last.fm Artist Info for more detailed metadata
+        if (!imageUrl) {
+            try {
+                const artistInfo = await this.lastfmService.getArtistInfo(lastfmArtist.name, lastfmArtist.mbid);
+                if (artistInfo && artistInfo.image && artistInfo.image.length > 0) {
+                    const largeImage = artistInfo.image.find((img: any) => img.size === 'extralarge') ||
+                        artistInfo.image.find((img: any) => img.size === 'large');
+                    const infoImageUrl = largeImage?.['#text'];
+                    if (infoImageUrl && !infoImageUrl.includes('2a96cbd8b46e442fc41c2b86b821562f')) {
+                        imageUrl = infoImageUrl;
+                    }
+                }
+            } catch (err) {
+                this.logger.warn(`Failed to get detailed Last.fm info for ${lastfmArtist.name}`);
+            }
+        }
+
+        artistCache.imageUrl = imageUrl || undefined;
 
         // Fetch MusicBrainz data if MBID exists
         if (lastfmArtist.mbid) {
