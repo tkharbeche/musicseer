@@ -143,4 +143,22 @@ export class InstancesService {
             return { success: false, message: error.message };
         }
     }
+
+    async findAllMappings(): Promise<UserServerMapping[]> {
+        return this.mappingRepository.find({
+            relations: ['user', 'server']
+        });
+    }
+
+    async createMapping(userId: string, serverId: string): Promise<UserServerMapping> {
+        const existing = await this.mappingRepository.findOne({ where: { userId, serverId } });
+        if (existing) return existing;
+
+        const mapping = this.mappingRepository.create({ userId, serverId });
+        return this.mappingRepository.save(mapping);
+    }
+
+    async removeMapping(mappingId: string): Promise<void> {
+        await this.mappingRepository.delete(mappingId);
+    }
 }

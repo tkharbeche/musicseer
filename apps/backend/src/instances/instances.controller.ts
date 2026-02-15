@@ -3,6 +3,8 @@ import { InstancesService } from './instances.service';
 import { CreateInstanceDto } from './dto/create-instance.dto';
 import { UpdateInstanceDto } from './dto/update-instance.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 
 @Controller('instances')
 @UseGuards(JwtAuthGuard)
@@ -38,5 +40,26 @@ export class InstancesController {
     @Post(':id/test')
     testConnection(@Request() req: any, @Param('id') id: string) {
         return this.instancesService.testConnection(req.user.id, id);
+    }
+
+    @Get('admin/mappings')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles('admin')
+    findAllMappings() {
+        return this.instancesService.findAllMappings();
+    }
+
+    @Post('admin/mappings')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles('admin')
+    createMapping(@Body() body: { userId: string, serverId: string }) {
+        return this.instancesService.createMapping(body.userId, body.serverId);
+    }
+
+    @Delete('admin/mappings/:id')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles('admin')
+    removeMapping(@Param('id') id: string) {
+        return this.instancesService.removeMapping(id);
     }
 }

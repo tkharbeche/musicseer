@@ -6,7 +6,7 @@ import api from '@/lib/api';
 import { ServerInstance, Request as MusicRequest } from '@musicseer/shared-types';
 
 export default function AdminPage() {
-    const [activeTab, setActiveTab] = useState<'servers' | 'requests'>('requests');
+    const [activeTab, setActiveTab] = useState<'servers' | 'requests' | 'mappings'>('requests');
 
     return (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -25,9 +25,17 @@ export default function AdminPage() {
                 >
                     Server Instances
                 </button>
+                <button
+                    className={`py-4 px-6 font-medium text-sm ${activeTab === 'mappings' ? 'border-b-2 border-indigo-500 text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
+                    onClick={() => setActiveTab('mappings')}
+                >
+                    User Mappings
+                </button>
             </div>
 
-            {activeTab === 'requests' ? <RequestsManager /> : <ServersManager />}
+            {activeTab === 'requests' && <RequestsManager />}
+            {activeTab === 'servers' && <ServersManager />}
+            {activeTab === 'mappings' && <UserMappingsManager />}
         </div>
     );
 }
@@ -318,6 +326,139 @@ function AddServerModal({ onClose }: { onClose: () => void }) {
                         Add Server
                     </button>
                 </div>
+            </div>
+        </div>
+    );
+}
+
+function UserMappingsManager() {
+    const queryClient = useQueryClient();
+    const [selectedUser, setSelectedUser] = useState('');
+    const [selectedServer, setSelectedServer] = useState('');
+
+    const { data: mappings, isLoading: mappingsLoading } = useQuery(
+        'admin-mappings',
+        async () => {
+            const res = await api.get('/instances/admin/mappings');
+            return res.data;
+        }
+    );
+
+    const { data: users } = useQuery(
+        'admin-users',
+        async () => {
+            const res = await api.get('/auth/users');
+            return res.data;
+        }
+    );
+
+    const { data: servers } = useQuery<ServerInstance[]>(
+        'admin-servers',
+        async () => {
+            const res = await api.get('/instances');
+            return res.data;
+        }
+    );
+
+    const addMappingMutation = useMutation(
+        async (data: { userId: string, serverId: string }) => {
+            return api.post('/instances/admin/mappings', data);
+        },
+        {
+            onSuccess: () => {
+                queryClient.invalidateQueries('admin-mappings');
+                setSelectedUser('');
+                setSelectedServer('');
+            }
+        }
+    );
+
+    const removeMappingMutation = useMutation(
+        async (id: string) => {
+            return api.delete(`/instances/admin/mappings/${id}`);
+        },
+        {
+            onSuccess: () => {
+                queryClient.invalidateQueries('admin-mappings');
+            }
+        }
+    );
+
+    if (mappingsLoading) return <p>Loading mappings...</p>;
+
+    return (
+        <div>
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow mb-8 border border-gray-200 dark:border-gray-700">
+                <h3 className="text-lg font-semibold mb-4">Add User-Server Mapping</h3>
+                <div className="flex flex-wrap gap-4 items-end">
+                    <div>
+                        <label className="block text-sm font-medium mb-1">User</label>
+                        <select
+                            className="rounded-md border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 p-2"
+                            value={selectedUser}
+                            onChange={(e) => setSelectedUser(e.target.value)}
+                        >
+                            <option value="">Select User</option>
+                            {users?.map((user: any) => (
+                                <option key={user.id} value={user.id}>{user.username} ({user.email})</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Server</label>
+                        <select
+                            className="rounded-md border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 p-2"
+                            value={selectedServer}
+                            onChange={(e) => setSelectedServer(e.target.value)}
+                        >
+                            <option value="">Select Server</option>
+                            {servers?.map((server) => (
+                                <option key={server.id} value={server.id}>{server.name} ({server.type})</option>
+                            ))}
+                        </select>
+                    </div>
+                    <button
+                        onClick={() => addMappingMutation.mutate({ userId: selectedUser, serverId: selectedServer })}
+                        disabled={!selectedUser || !selectedServer}
+                        className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 disabled:opacity-50"
+                    >
+                        Map User
+                    </button>
+                </div>
+            </div>
+
+            <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead className="bg-gray-50 dark:bg-gray-900">
+                        <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Server</th>
+                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                        {mappings?.map((mapping: any) => (
+                            <tr key={mapping.id}>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{mapping.user?.username}</div>
+                                    <div className="text-xs text-gray-500">{mapping.user?.email}</div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                    <div className="text-sm text-gray-900 dark:text-gray-100">{mapping.server?.name}</div>
+                                    <div className="text-xs text-gray-500 capitalize">{mapping.server?.type}</div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                    <button
+                                        onClick={() => removeMappingMutation.mutate(mapping.id)}
+                                        className="text-red-600 hover:text-red-900"
+                                    >
+                                        Unmap
+                                    </button>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
             </div>
         </div>
     );
