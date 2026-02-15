@@ -34,7 +34,7 @@ export class LidarrService {
         if (!isValid) {
             throw new HttpException(
                 'Invalid Lidarr API key or server unavailable',
-                HttpStatus.UNAUTHORIZED,
+                HttpStatus.BAD_REQUEST,
             );
         }
     }
