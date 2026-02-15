@@ -45,6 +45,8 @@ CREATE TABLE IF NOT EXISTS artists_cache (
     name VARCHAR(500) NOT NULL,
     lastfm_playcount BIGINT DEFAULT 0,
     lastfm_listeners BIGINT DEFAULT 0,
+    popularity_score FLOAT DEFAULT 0,
+    latest_release_date TIMESTAMP WITH TIME ZONE,
     genres TEXT[],
     similar_artist_mbids UUID[],
     bio TEXT,
@@ -100,6 +102,7 @@ CREATE TABLE IF NOT EXISTS trending_cache (
     artist_name VARCHAR(500) NOT NULL,
     rank INTEGER NOT NULL,
     chart_type VARCHAR(50) NOT NULL DEFAULT 'global',
+    image_url VARCHAR(1000),
     cached_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(artist_mbid, chart_type)
 );

@@ -2,51 +2,44 @@ import Link from 'next/link';
 
 export default function Home() {
     return (
-        <div className="flex flex-col items-center justify-center min-h-[calc(100vh-64px)] p-6">
-            <div className="max-w-4xl w-full text-center">
-                <h1 className="text-5xl font-extrabold tracking-tight mb-4">
-                    Discover Your Next <span className="text-indigo-600">Favorite Artist</span>
-                </h1>
-                <p className="text-xl text-gray-600 dark:text-gray-400 mb-12">
-                    MusicSeer connects your Navidrome library with global trends and Lidarr for a seamless discovery experience.
-                </p>
+        <div className="flex flex-col items-center justify-center min-h-[80vh] px-4 text-center">
+            <h1 className="text-5xl md:text-6xl font-extrabold tracking-tight mb-4 bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                MusicSeer
+            </h1>
+            <p className="text-xl text-gray-600 dark:text-gray-400 max-w-2xl mb-10">
+                The intelligent music discovery and request management bridge for your self-hosted music ecosystem.
+            </p>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    <Link href="/discovery" className="group p-8 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-xl hover:-translate-y-1 transition-all">
-                        <div className="h-12 w-12 bg-indigo-100 dark:bg-indigo-900/50 rounded-lg flex items-center justify-center mb-6 mx-auto group-hover:scale-110 transition-transform">
-                            <svg className="h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                            </svg>
-                        </div>
-                        <h2 className="text-xl font-bold mb-2">Trending Now</h2>
-                        <p className="text-gray-500 dark:text-gray-400 text-sm">
-                            See what the world is listening to right now via Last.fm.
-                        </p>
-                    </Link>
+            <div className="flex flex-col sm:flex-row gap-4">
+                <Link
+                    href="/dashboard"
+                    className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-full font-bold text-lg transition-all transform hover:scale-105"
+                >
+                    Get Started
+                </Link>
+                <Link
+                    href="https://github.com/yourusername/musicseer"
+                    className="px-8 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full font-bold text-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-all"
+                >
+                    View on GitHub
+                </Link>
+            </div>
 
-                    <Link href="/discovery" className="group p-8 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-xl hover:-translate-y-1 transition-all">
-                        <div className="h-12 w-12 bg-purple-100 dark:bg-purple-900/50 rounded-lg flex items-center justify-center mb-6 mx-auto group-hover:scale-110 transition-transform">
-                            <svg className="h-6 w-6 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                            </svg>
-                        </div>
-                        <h2 className="text-xl font-bold mb-2">Similar to You</h2>
-                        <p className="text-gray-500 dark:text-gray-400 text-sm">
-                            Recommendations based on your unique listening history.
-                        </p>
-                    </Link>
-
-                    <Link href="/requests" className="group p-8 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-xl hover:-translate-y-1 transition-all">
-                        <div className="h-12 w-12 bg-pink-100 dark:bg-pink-900/50 rounded-lg flex items-center justify-center mb-6 mx-auto group-hover:scale-110 transition-transform">
-                            <svg className="h-6 w-6 text-pink-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                            </svg>
-                        </div>
-                        <h2 className="text-xl font-bold mb-2">Track Requests</h2>
-                        <p className="text-gray-500 dark:text-gray-400 text-sm">
-                            Manage and track your music requests from start to finish.
-                        </p>
-                    </Link>
+            <div className="mt-20 grid grid-cols-1 md:grid-cols-3 gap-8 text-left max-w-5xl">
+                <div className="p-6 bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
+                    <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-xl flex items-center justify-center mb-4 text-2xl">🔥</div>
+                    <h3 className="text-xl font-bold mb-2">Discovery</h3>
+                    <p className="text-gray-500 dark:text-gray-400">Discover trending artists and personalized recommendations from Last.fm and MusicBrainz.</p>
+                </div>
+                <div className="p-6 bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
+                    <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 text-purple-600 rounded-xl flex items-center justify-center mb-4 text-2xl">🔗</div>
+                    <h3 className="text-xl font-bold mb-2">Integration</h3>
+                    <p className="text-gray-500 dark:text-gray-400">Seamlessly connects with your Navidrome library and Lidarr instance for easy requests.</p>
+                </div>
+                <div className="p-6 bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
+                    <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 text-green-600 rounded-xl flex items-center justify-center mb-4 text-2xl">⚡</div>
+                    <h3 className="text-xl font-bold mb-2">Automated</h3>
+                    <p className="text-gray-500 dark:text-gray-400">Admins can approve requests with one click, and MusicSeer handles the rest with Lidarr.</p>
                 </div>
             </div>
         </div>

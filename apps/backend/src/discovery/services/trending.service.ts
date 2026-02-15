@@ -2,13 +2,13 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import axios from 'axios';
 import { ArtistCache } from '../entities/artist-cache.entity';
 import { TrendingCache } from '../entities/trending-cache.entity';
 import { LastfmService } from './lastfm.service';
 import { MusicbrainzService } from './musicbrainz.service';
 import { LidarrService } from '../../instances/services/lidarr.service';
 import { InstancesService } from '../../instances/instances.service';
-import { isImageDisplayable } from '../utils/image-validator';
 
 @Injectable()
 export class TrendingService implements OnModuleInit {
@@ -130,6 +130,20 @@ export class TrendingService implements OnModuleInit {
     }
 
     /**
+     * Verify if an image URL is displayable
+     */
+    private async isImageDisplayable(url: string): Promise<boolean> {
+        if (!url) return false;
+        try {
+            const response = await axios.head(url, { timeout: 3000 });
+            const contentType = response.headers['content-type'];
+            return response.status === 200 && contentType?.startsWith('image/');
+        } catch (error) {
+            return false;
+        }
+    }
+
+    /**
      * Update artist cache with Last.fm, MusicBrainz, and Lidarr data
      * Strictly follows Step A-B-C pipeline from Enrichment Strategy
      */
@@ -150,56 +164,47 @@ export class TrendingService implements OnModuleInit {
         artistCache.lastfmListeners = parseInt(lastfmArtist.listeners || '0', 10);
 
         // Calculate Popularity Score (40% weight source)
-        // Using log scale for better distribution, assuming 5M listeners as "max"
         const listeners = artistCache.lastfmListeners;
         artistCache.popularityScore = Math.min(Math.log10(listeners + 1) / Math.log10(5000000), 1);
 
         // --- STEP B: Identity Validation & Metadata (MusicBrainz) ---
         let currentMbid = artistCache.mbid;
 
-        // If MBID is missing, search on MusicBrainz
         if (!currentMbid) {
             try {
                 const mbSearchResults = await this.musicbrainzService.searchArtist(lastfmArtist.name);
                 if (mbSearchResults.length > 0) {
                     currentMbid = mbSearchResults[0].id;
                     artistCache.mbid = currentMbid;
-                    this.logger.debug(`Found MBID for ${lastfmArtist.name}: ${currentMbid}`);
                 }
             } catch (err) {
-                this.logger.warn(`MB search failed for ${lastfmArtist.name}: ${err.message}`);
+                this.logger.warn(`MB search failed for ${lastfmArtist.name}`);
             }
         }
 
-        // Perform MB lookup for genres and release dates
         if (currentMbid) {
             try {
                 const mbData = await this.musicbrainzService.getArtistByMbid(currentMbid);
                 if (mbData) {
                     artistCache.musicbrainzData = mbData;
-
-                    // Extract official genres
                     if (mbData.tags) {
                         artistCache.genres = mbData.tags.map((tag: any) => tag.name);
                     }
-
-                    // Extract latest release date for Freshness (10% weight source)
                     const latestDate = this.musicbrainzService.getLatestReleaseDate(mbData);
                     if (latestDate) {
                         artistCache.latestReleaseDate = latestDate;
                     }
                 }
             } catch (err) {
-                this.logger.warn(`MB lookup failed for MBID ${currentMbid}: ${err.message}`);
+                this.logger.warn(`MB lookup failed for MBID ${currentMbid}`);
             }
         }
 
         // --- STEP C: Visual Content (Last.fm Info / Lidarr) ---
         let imageUrl: string | undefined = undefined;
 
-        // Try Last.fm artist.getInfo first (often better images than bulk lists)
         try {
-            const info = await this.lastfmService.getArtistInfo(lastfmArtist.name, currentMbid);
+            const info = await this.lastfmService.getArtistInfo(lastfmArtist.name, currentMbid || undefined);
             if (info && info.image && info.image.length > 0) {
                 const bestLastfm = info.image.find((img: any) => img.size === 'extralarge') ||
                                  info.image.find((img: any) => img.size === 'large');
@@ -212,15 +217,14 @@ export class TrendingService implements OnModuleInit {
             this.logger.warn(`Last.fm getInfo failed for ${lastfmArtist.name}`);
         }
 
-        // Lidarr Enrichment (Fanart.tv fallback)
-        if (!imageUrl || imageUrl.includes('lastfm')) { // Prefer Lidarr/Fanart if available
+        if (!imageUrl || imageUrl.includes('lastfm')) {
             try {
                 const lidarrInstance = await this.instancesService.findAnyActiveByType('lidarr');
                 if (lidarrInstance) {
                     const lookupTerm = currentMbid ? `lidarr:${currentMbid}` : lastfmArtist.name;
                     const lidarrArtists = await this.lidarrService.lookupArtist(lidarrInstance.baseUrl, lidarrInstance.apiKey, lookupTerm);
                     const lidarrMetadata = currentMbid
-                        ? lidarrArtists.find(a => a.foreignArtistId === currentMbid)
+                        ? lidarrArtists.find((a: any) => a.foreignArtistId === currentMbid)
                         : lidarrArtists[0];
 
                     if (lidarrMetadata && lidarrMetadata.images && lidarrMetadata.images.length > 0) {
@@ -233,38 +237,30 @@ export class TrendingService implements OnModuleInit {
                         }
                     }
                 }
-            } catch (err) {
-                this.logger.debug(`Lidarr enrichment skipped for ${lastfmArtist.name}`);
-            }
+            } catch (err) {}
         }
 
         // --- STEP D: MusicBrainz Release Image Fallback ---
         if (!imageUrl && currentMbid && artistCache.musicbrainzData?.releases) {
             try {
-                // Find latest releases with a date
                 const releases = artistCache.musicbrainzData.releases
                     .filter((r: any) => r.date)
                     .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-                // Try top 3 latest releases
                 for (const release of releases.slice(0, 3)) {
                     const releaseImg = await this.musicbrainzService.getReleaseImageUrl(release.id);
                     if (releaseImg) {
                         imageUrl = releaseImg;
-                        this.logger.debug(`Enriched ${lastfmArtist.name} image from MB Release: ${release.title}`);
                         break;
                     }
                 }
-            } catch (err) {
-                this.logger.warn(`MB Release image enrichment failed for ${lastfmArtist.name}`);
-            }
+            } catch (err) {}
         }
 
-        // Validate image before saving
+        // Validate image
         if (imageUrl) {
-            const isDisplayable = await isImageDisplayable(imageUrl);
+            const isDisplayable = await this.isImageDisplayable(imageUrl);
             if (!isDisplayable) {
-                this.logger.warn(`Image for ${lastfmArtist.name} is not displayable: ${imageUrl}`);
                 imageUrl = undefined;
             }
         }

@@ -1,44 +1,43 @@
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, Index, CreateDateColumn } from 'typeorm';
 
 @Entity('artists_cache')
 export class ArtistCache {
     @PrimaryGeneratedColumn('uuid')
     id: string;
 
-    @Column({ type: 'uuid', nullable: true, unique: true })
-    mbid?: string;
+    @Column({ unique: true, nullable: true })
+    @Index()
+    mbid: string | null;
 
-    @Column({ type: 'float', default: 0, name: 'popularity_score' })
-    popularityScore: number;
-
-    @Column({ type: 'timestamp', nullable: true, name: 'latest_release_date' })
-    latestReleaseDate?: Date;
-
-    @Column({ length: 500 })
+    @Column()
+    @Index()
     name: string;
 
-    @Column({ type: 'bigint', default: 0, name: 'lastfm_playcount' })
+    @Column({ name: 'lastfm_playcount', type: 'bigint', default: 0 })
     lastfmPlaycount: number;
 
-    @Column({ type: 'bigint', default: 0, name: 'lastfm_listeners' })
+    @Column({ name: 'lastfm_listeners', type: 'bigint', default: 0 })
     lastfmListeners: number;
 
-    @Column({ type: 'text', array: true, nullable: true })
-    genres?: string[];
+    @Column({ name: 'popularity_score', type: 'float', default: 0 })
+    popularityScore: number;
 
-    @Column({ type: 'uuid', array: true, nullable: true, name: 'similar_artist_mbids' })
-    similarArtistMbids?: string[];
+    @Column({ name: 'latest_release_date', nullable: true })
+    latestReleaseDate: Date;
 
-    @Column({ type: 'text', nullable: true })
+    @Column("text", { array: true, nullable: true })
+    genres: string[];
+
+    @Column({ name: 'bio', type: 'text', nullable: true })
     bio?: string;
 
-    @Column({ length: 1000, nullable: true, name: 'image_url' })
+    @Column({ name: 'image_url', nullable: true })
     imageUrl?: string;
 
-    @Column({ type: 'jsonb', nullable: true, name: 'musicbrainz_data' })
+    @Column({ name: 'musicbrainz_data', type: 'jsonb', nullable: true })
     musicbrainzData?: any;
 
-    @CreateDateColumn({ name: 'last_synced_at' })
+    @Column({ name: 'last_synced_at' })
     lastSyncedAt: Date;
 
     @CreateDateColumn({ name: 'created_at' })

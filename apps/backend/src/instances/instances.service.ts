@@ -7,7 +7,6 @@ import { CreateInstanceDto } from './dto/create-instance.dto';
 import { UpdateInstanceDto } from './dto/update-instance.dto';
 import { NavidromeService } from './services/navidrome.service';
 import { LidarrService } from './services/lidarr.service';
-import { normalizeBaseUrl } from '../common/utils/url.utils';
 
 @Injectable()
 export class InstancesService {
@@ -21,8 +20,7 @@ export class InstancesService {
     ) { }
 
     async create(userId: string, createInstanceDto: CreateInstanceDto): Promise<ServerInstance> {
-        const { type, apiKey, username, name } = createInstanceDto;
-        const baseUrl = normalizeBaseUrl(createInstanceDto.baseUrl, type as any);
+        const { type, baseUrl, apiKey, username, name } = createInstanceDto;
 
         // Validate connection based on type
         if (type === 'navidrome' && username) {
@@ -33,10 +31,7 @@ export class InstancesService {
         }
 
         // Create server instance
-        const instance = this.instanceRepository.create({
-            ...createInstanceDto,
-            baseUrl
-        });
+        const instance = this.instanceRepository.create(createInstanceDto);
         const savedInstance = await this.instanceRepository.save(instance);
 
         // Create user-server mapping
@@ -71,30 +66,12 @@ export class InstancesService {
         return mapping.server;
     }
 
-    async findById(id: string): Promise<ServerInstance> {
-        const instance = await this.instanceRepository.findOne({
-            where: { id },
-        });
-
-        if (!instance) {
-            throw new NotFoundException('Server instance not found');
-        }
-
-        return instance;
-    }
-
-    async findAnyActiveByType(type: 'navidrome' | 'lidarr' | 'jellyfin'): Promise<ServerInstance | null> {
-        return this.instanceRepository.findOne({
-            where: { type, isActive: true },
-        });
-    }
-
     async update(userId: string, id: string, updateInstanceDto: UpdateInstanceDto): Promise<ServerInstance> {
         const instance = await this.findOne(userId, id);
 
         // If changing apiKey or baseUrl, revalidate connection
         if (updateInstanceDto.apiKey || updateInstanceDto.baseUrl) {
-            const baseUrl = normalizeBaseUrl(updateInstanceDto.baseUrl || instance.baseUrl, instance.type as any);
+            const baseUrl = updateInstanceDto.baseUrl || instance.baseUrl;
             const apiKey = updateInstanceDto.apiKey || instance.apiKey;
 
             if (instance.type === 'navidrome' && (updateInstanceDto.username || instance.username)) {
@@ -103,8 +80,6 @@ export class InstancesService {
             } else if (instance.type === 'lidarr') {
                 await this.lidarrService.validateApiKey(baseUrl, apiKey);
             }
-
-            updateInstanceDto.baseUrl = baseUrl;
         }
 
         Object.assign(instance, updateInstanceDto);
@@ -135,13 +110,12 @@ export class InstancesService {
 
     async testConnection(userId: string, id: string): Promise<{ success: boolean; message: string }> {
         const instance = await this.findOne(userId, id);
-        const baseUrl = normalizeBaseUrl(instance.baseUrl, instance.type as any);
 
         try {
             if (instance.type === 'navidrome' && instance.username) {
-                await this.navidromeService.testConnection(baseUrl, instance.username, instance.apiKey);
+                await this.navidromeService.testConnection(instance.baseUrl, instance.username, instance.apiKey);
             } else if (instance.type === 'lidarr') {
-                await this.lidarrService.testConnection(baseUrl, instance.apiKey);
+                await this.lidarrService.testConnection(instance.baseUrl, instance.apiKey);
             } else {
                 throw new BadRequestException('Invalid server configuration');
             }
@@ -152,21 +126,9 @@ export class InstancesService {
         }
     }
 
-    async findAllMappings(): Promise<UserServerMapping[]> {
-        return this.mappingRepository.find({
-            relations: ['user', 'server']
+    async findAnyActiveByType(type: string): Promise<ServerInstance | null> {
+        return this.instanceRepository.findOne({
+            where: { type, isActive: true },
         });
-    }
-
-    async createMapping(userId: string, serverId: string): Promise<UserServerMapping> {
-        const existing = await this.mappingRepository.findOne({ where: { userId, serverId } });
-        if (existing) return existing;
-
-        const mapping = this.mappingRepository.create({ userId, serverId });
-        return this.mappingRepository.save(mapping);
-    }
-
-    async removeMapping(mappingId: string): Promise<void> {
-        await this.mappingRepository.delete(mappingId);
     }
 }

@@ -21,6 +21,6 @@ import { InstancesModule } from '../instances/instances.module';
     ],
     controllers: [DiscoveryController, RecommendationController],
     providers: [LastfmService, MusicbrainzService, TrendingService, SimilarityService, RecommendationService],
-    exports: [TrendingService, LastfmService, SimilarityService, RecommendationService, MusicbrainzService],
+    exports: [TrendingService, LastfmService, SimilarityService, RecommendationService],
 })
 export class DiscoveryModule { }

@@ -2,30 +2,30 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import Navbar from '@/components/Navbar'
-import Providers from './providers'
+import Providers from '@/components/Providers'
 
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-    title: 'MusicSeer - Music Discovery & Request Manager',
-    description: 'Open-source music discovery and request management for Lidarr and Navidrome',
+  title: 'MusicSeer',
+  description: 'Intelligent music discovery and requests',
 }
 
 export default function RootLayout({
-    children,
+  children,
 }: {
-    children: React.ReactNode
+  children: React.ReactNode
 }) {
-    return (
-        <html lang="en">
-            <body className={`${inter.className} bg-gray-50 dark:bg-black text-gray-900 dark:text-gray-100`}>
-                <Providers>
-                    <Navbar />
-                    <main className="min-h-screen">
-                        {children}
-                    </main>
-                </Providers>
-            </body>
-        </html>
-    )
+  return (
+    <html lang="en">
+      <body className={inter.className}>
+        <Providers>
+          <Navbar />
+          <main className="min-h-screen bg-gray-50 dark:bg-gray-950">
+            {children}
+          </main>
+        </Providers>
+      </body>
+    </html>
+  )
 }

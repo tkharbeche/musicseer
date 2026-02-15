@@ -11,8 +11,8 @@ export class RecommendationController {
     async getRecommendations(
         @Request() req: any,
         @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
-        @Query('serverId') serverId?: string
+        @Query('serverId') serverId?: string,
     ) {
-        return this.recommendationService.getRecommendations(req.user.id, limit, serverId);
+        return this.recommendationService.getRecommendations(req.user.userId, limit, serverId);
     }
 }

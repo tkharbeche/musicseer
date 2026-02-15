@@ -31,7 +31,8 @@
         "class-transformer": "^0.5.1",
         "axios": "^1.6.5",
         "rxjs": "^7.8.1",
-        "reflect-metadata": "^0.2.1"
+        "reflect-metadata": "^0.2.1",
+        "@musicseer/shared-types": "workspace:*"
     },
     "devDependencies": {
         "@nestjs/cli": "^10.3.0",

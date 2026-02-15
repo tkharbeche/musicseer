@@ -84,17 +84,6 @@ export class AuthService {
         return this.userRepository.findOne({ where: { id: userId } });
     }
 
-    async findAll(): Promise<Partial<User>[]> {
-        const users = await this.userRepository.find({
-            order: { username: 'ASC' }
-        });
-
-        return users.map(user => {
-            const { passwordHash: _, ...userWithoutPassword } = user;
-            return userWithoutPassword;
-        });
-    }
-
     private generateToken(user: User): string {
         const payload = {
             sub: user.id,

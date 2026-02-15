@@ -17,7 +17,7 @@ export interface MusicBrainzArtist {
 @Injectable()
 export class MusicbrainzService {
     private readonly logger = new Logger(MusicbrainzService.name);
-    private readonly baseUrl = 'https://musicbrainz.org/ws/2';
+    private readonly baseUrl = 'https://musicbrainz.org/ws/2/';
     private readonly appName: string;
     private readonly appVersion: string;
     private readonly contact: string;
@@ -37,7 +37,7 @@ export class MusicbrainzService {
      */
     async getArtistByMbid(mbid: string): Promise<MusicBrainzArtist | null> {
         try {
-            const response = await this.authenticatedRequest(`${this.baseUrl}/artist/${mbid}`, {
+            const response = await this.authenticatedRequest(`${this.baseUrl}artist/${mbid}`, {
                 fmt: 'json',
                 inc: 'tags+ratings+genres+releases+release-groups',
             });
@@ -57,7 +57,7 @@ export class MusicbrainzService {
      */
     async searchArtist(artistName: string): Promise<MusicBrainzArtist[]> {
         try {
-            const response = await this.authenticatedRequest(`${this.baseUrl}/artist`, {
+            const response = await this.authenticatedRequest(`${this.baseUrl}artist`, {
                 query: `artist:"${artistName}"`,
                 fmt: 'json',
                 limit: 5,
@@ -74,6 +74,46 @@ export class MusicbrainzService {
     }
 
     /**
+     * Get cover art URL for a specific release
+     */
+    async getReleaseImageUrl(releaseMbid: string): Promise<string | null> {
+        try {
+            const response = await this.authenticatedRequest(`${this.baseUrl}release/${releaseMbid}`, {
+                fmt: 'json',
+                inc: 'cover-art-archive',
+            });
+
+            if (response.data?.['cover-art-archive']?.front) {
+                return `https://coverartarchive.org/release/${releaseMbid}/front`;
+            }
+
+            return null;
+        } catch (error) {
+            this.logger.error(`Failed to fetch release image for ${releaseMbid}: ${error.message}`);
+            return null;
+        }
+    }
+
+    /**
+     * Helper to find the latest release date from an artist's release groups
+     */
+    getLatestReleaseDate(artist: MusicBrainzArtist): Date | null {
+        if (!artist['release-groups'] || artist['release-groups'].length === 0) {
+            return null;
+        }
+
+        const dates = artist['release-groups']
+            .map(rg => rg['first-release-date'])
+            .filter(date => !!date)
+            .map(date => new Date(date))
+            .filter(date => !isNaN(date.getTime()));
+
+        if (dates.length === 0) return null;
+
+        return new Date(Math.max(...dates.map(d => d.getTime())));
+    }
+
+    /**
      * Internal helper to handle authenticated requests with Digest Auth
      */
     private async authenticatedRequest(url: string, params: any = {}) {
@@ -86,14 +126,12 @@ export class MusicbrainzService {
         }
 
         try {
-            // First try without auth
             return await axios.get(url, { params, headers });
         } catch (error) {
             if (error.response?.status === 401 && error.response.headers['www-authenticate']) {
                 const authHeader = error.response.headers['www-authenticate'];
                 const digestParams = this.parseDigestHeader(authHeader);
 
-                // For Digest auth, the URI should be the path + query string
                 const urlObj = new URL(url);
                 const searchParams = new URLSearchParams(params);
                 const uri = `${urlObj.pathname}?${searchParams.toString()}`;
@@ -142,48 +180,6 @@ export class MusicbrainzService {
         if (qop) header += `, qop=${qop}, nc=${nc}, cnonce="${cnonce}"`;
 
         return header;
-    }
-
-    /**
-     * Helper to find the latest release date from an artist's release groups
-     */
-    /**
-     * Get cover art URL for a specific release
-     */
-    async getReleaseImageUrl(releaseMbid: string): Promise<string | null> {
-        try {
-            // First check if release has cover art via MusicBrainz API
-            const response = await this.authenticatedRequest(`${this.baseUrl}/release/${releaseMbid}`, {
-                fmt: 'json',
-                inc: 'cover-art-archive',
-            });
-
-            if (response.data?.['cover-art-archive']?.front) {
-                // If it has a front cover, the standard URL is from Cover Art Archive
-                return `https://coverartarchive.org/release/${releaseMbid}/front`;
-            }
-
-            return null;
-        } catch (error) {
-            this.logger.error(`Failed to fetch release image for ${releaseMbid}: ${error.message}`);
-            return null;
-        }
-    }
-
-    getLatestReleaseDate(artist: MusicBrainzArtist): Date | null {
-        if (!artist['release-groups'] || artist['release-groups'].length === 0) {
-            return null;
-        }
-
-        const dates = artist['release-groups']
-            .map(rg => rg['first-release-date'])
-            .filter(date => !!date)
-            .map(date => new Date(date))
-            .filter(date => !isNaN(date.getTime()));
-
-        if (dates.length === 0) return null;
-
-        return new Date(Math.max(...dates.map(d => d.getTime())));
     }
 
     private delay(ms: number): Promise<void> {
