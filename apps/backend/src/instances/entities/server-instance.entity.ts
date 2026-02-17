@@ -23,6 +23,9 @@ export class ServerInstance {
     @Column({ default: true, name: 'is_active' })
     isActive: boolean;
 
+    @Column({ default: false, name: 'is_auth_source' })
+    isAuthSource: boolean;
+
     @CreateDateColumn({ name: 'created_at' })
     createdAt: Date;
 

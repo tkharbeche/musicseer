@@ -7,7 +7,7 @@ export class SimilarityCache {
     id: string;
 
     @Column({ name: 'source_mbid', nullable: true })
-    sourceMbid: string; // Removed | null to avoid Object metadata emission
+    sourceMbid?: string;
 
     @Column({ name: 'source_artist_name' })
     sourceArtistName: string;

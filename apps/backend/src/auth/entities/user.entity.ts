@@ -17,6 +17,9 @@ export class User {
     @Column({ length: 50, default: 'user' })
     role: string;
 
+    @Column({ default: false, name: 'can_auto_approve' })
+    canAutoApprove: boolean;
+
     @CreateDateColumn({ name: 'created_at' })
     createdAt: Date;
 
