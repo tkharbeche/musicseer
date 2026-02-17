@@ -12,6 +12,14 @@ export class RecommendationController {
         @Request() req: any,
         @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number
     ) {
-        return this.recommendationService.getRecommendations(req.user.userId, limit);
+        return this.recommendationService.getRecommendations(req.user.id, limit);
+    }
+
+    @Get('hidden-gems')
+    async getHiddenGems(
+        @Request() req: any,
+        @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number
+    ) {
+        return this.recommendationService.getHiddenGems(req.user.id, limit);
     }
 }

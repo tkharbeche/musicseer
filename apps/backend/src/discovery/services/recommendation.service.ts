@@ -44,6 +44,13 @@ export class RecommendationService {
 
         const libraryArtistNames = new Set(userLibrary.map(item => item.artistName.toLowerCase()));
 
+        // Get user genres for diversity scoring
+        const userGenres = new Set<string>();
+        const artistsWithGenres = await this.librarySnapshotRepository.manager.getRepository('ArtistCache').find({
+            where: { name: In(userLibrary.map(a => a.artistName)) }
+        });
+        artistsWithGenres.forEach(a => (a as any).genres?.forEach((g: string) => userGenres.add(g.toLowerCase())));
+
         // 2. Candidate Generation
         // Fetch similar artists for top 10 library artists
         const candidates = new Map<string, any>(); // artistName -> { artist, score components }
@@ -86,18 +93,34 @@ export class RecommendationService {
         this.logger.debug(`Total candidates found: ${candidates.size}`);
 
         // 3. Scoring
-        const scoredCandidates = Array.from(candidates.values()).map(candidate => {
+        const scoredCandidates = await Promise.all(Array.from(candidates.values()).map(async (candidate) => {
             // Normalize Similarity (0-1) - Average based on occurrences
             const avgSimilarity = candidate.similarityScore / candidate.occurrences;
 
-            // Global Popularity (Mocked for now)
-            const popularityScore = 0.5;
+            // Fetch artist cache for more data
+            const artistCache = await this.librarySnapshotRepository.manager.getRepository('ArtistCache').findOne({
+                where: candidate.mbid ? { mbid: candidate.mbid } : { name: candidate.name }
+            }) as any;
 
-            // Genre Diversity (MVP: 0.5 default)
-            const diversityScore = 0.5;
+            // Global Popularity (0-1) - Based on listeners (normalized against a threshold of 5M)
+            const listeners = artistCache?.lastfmListeners || 0;
+            const popularityScore = Math.min(listeners / 5000000, 1);
 
-            // Freshness (MVP: 0.5 default)
-            const freshnessScore = 0.5;
+            // Genre Diversity (0-1) - Bonus for underrepresented tags
+            let diversityScore = 0.5;
+            if (artistCache?.genres) {
+                const newGenresCount = artistCache.genres.filter((g: string) => !userGenres.has(g.toLowerCase())).length;
+                diversityScore = Math.min(newGenresCount / 3, 1); // 3+ new genres = max diversity
+            }
+
+            // Freshness (0-1)
+            let freshnessScore = 0.5;
+            if (artistCache?.latestReleaseDate) {
+                const releaseDate = new Date(artistCache.latestReleaseDate);
+                const now = new Date();
+                const diffMonths = (now.getFullYear() - releaseDate.getFullYear()) * 12 + (now.getMonth() - releaseDate.getMonth());
+                freshnessScore = Math.max(0, 1 - (diffMonths / 24)); // Normalized over 2 years
+            }
 
             // Final Weighted Score
             const finalScore =
@@ -109,9 +132,10 @@ export class RecommendationService {
             return {
                 ...candidate,
                 score: finalScore,
+                genres: artistCache?.genres || [],
                 reason: `Similar to ${candidate.seedArtists.slice(0, 3).join(', ')}`
             };
-        });
+        }));
 
         this.logger.debug(`Scored candidates count: ${scoredCandidates.length}. Limit: ${limit} (type: ${typeof limit})`);
 
@@ -122,5 +146,21 @@ export class RecommendationService {
 
         this.logger.debug(`Returning ${results.length} recommendations`);
         return results;
+    }
+
+    /**
+     * Get "Hidden Gems" - Highly similar but low global popularity
+     */
+    async getHiddenGems(userId: string, limit: number = 20): Promise<any[]> {
+        const recommendations = await this.getRecommendations(userId, limit * 3);
+
+        const gems = recommendations
+            .filter(r => r.score > 0.3) // Must be somewhat relevant
+            .sort((a, b) => {
+                return b.score - a.score;
+            })
+            .slice(0, limit);
+
+        return gems;
     }
 }
