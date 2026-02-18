@@ -6,12 +6,15 @@ import { CreateRequestDto } from './dto/create-request.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
 import { LidarrService } from '../instances/services/lidarr.service';
 import { InstancesService } from '../instances/instances.service';
+import { User } from '../auth/entities/user.entity';
 
 @Injectable()
 export class RequestsService {
     constructor(
         @InjectRepository(Request)
         private readonly requestRepository: Repository<Request>,
+        @InjectRepository(User)
+        private readonly userRepository: Repository<User>,
         private readonly lidarrService: LidarrService,
         private readonly instancesService: InstancesService,
     ) { }
@@ -32,6 +35,14 @@ export class RequestsService {
             throw new ConflictException('You have already requested this artist');
         }
 
+        // Check if user has auto-approval enabled
+        const user = await this.userRepository.findOne({ where: { id: userId } });
+        const initialStatus = user?.canAutoApprove ? 'approved' : 'pending';
+        const role = user?.role || 'user';
+
+        // Admins also get auto-approved
+        const status = (role === 'admin' || initialStatus === 'approved') ? 'approved' : 'pending';
+
         // Create request
         const request = this.requestRepository.create({
             userId,
@@ -39,9 +50,13 @@ export class RequestsService {
             artistMbid,
             albumName,
             albumMbid,
-            targetServerId,
-            status: 'pending',
+            targetServerId: targetServerId || (await this.instancesService.findFirstLidarrInstance())?.id,
+            status,
         });
+
+        if (!request.artistMbid) {
+            request.adminNotes = 'Missing MBID. Admin must provide one before Lidarr submission.';
+        }
 
         return this.requestRepository.save(request);
     }
@@ -111,7 +126,13 @@ export class RequestsService {
         }
 
         if (!request.targetServerId) {
-            throw new HttpException('No target Lidarr server configured', HttpStatus.BAD_REQUEST);
+            const defaultLidarr = await this.instancesService.findFirstLidarrInstance();
+            if (defaultLidarr) {
+                request.targetServerId = defaultLidarr.id;
+                await this.requestRepository.save(request);
+            } else {
+                throw new HttpException('No target Lidarr server configured. Please add a Lidarr instance in the Admin Dashboard first.', HttpStatus.BAD_REQUEST);
+            }
         }
 
         if (!request.artistMbid) {
@@ -133,6 +154,9 @@ export class RequestsService {
                 {
                     foreignArtistId: request.artistMbid,
                     artistName: request.artistName,
+                    rootFolderPath: instance.settings?.rootFolderPath,
+                    qualityProfileId: instance.settings?.qualityProfileId,
+                    metadataProfileId: instance.settings?.metadataProfileId,
                 },
             );
 

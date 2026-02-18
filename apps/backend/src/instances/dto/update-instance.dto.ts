@@ -1,4 +1,4 @@
-import { IsString, IsUrl, IsOptional, IsBoolean, MinLength } from 'class-validator';
+import { IsString, IsUrl, IsOptional, IsBoolean, MinLength, IsObject } from 'class-validator';
 
 export class UpdateInstanceDto {
     @IsOptional()
@@ -26,4 +26,8 @@ export class UpdateInstanceDto {
     @IsOptional()
     @IsBoolean()
     isAuthSource?: boolean;
+
+    @IsOptional()
+    @IsObject()
+    settings?: Record<string, any>;
 }

@@ -79,8 +79,19 @@ export class LidarrService {
 
             return response.data;
         } catch (error) {
-            if (error.response?.status === 400 && error.response?.data?.includes('already exists')) {
-                throw new HttpException('Artist already exists in Lidarr', HttpStatus.CONFLICT);
+            if (error.response?.status === 400 && error.response?.data) {
+                const lidarrError = typeof error.response.data === 'string'
+                    ? error.response.data
+                    : JSON.stringify(error.response.data);
+
+                if (lidarrError.includes('already exists')) {
+                    throw new HttpException('Artist already exists in Lidarr', HttpStatus.CONFLICT);
+                }
+
+                throw new HttpException(
+                    `Lidarr validation error: ${lidarrError}`,
+                    HttpStatus.BAD_REQUEST,
+                );
             }
 
             throw new HttpException(

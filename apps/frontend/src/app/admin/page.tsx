@@ -14,7 +14,10 @@ import {
     ArrowLeft,
     Shield,
     Key,
-    User as UserIcon
+    User as UserIcon,
+    FileText,
+    Check,
+    Send
 } from 'lucide-react';
 
 export default function AdminPage() {
@@ -22,7 +25,7 @@ export default function AdminPage() {
     const queryClient = useQueryClient();
     const [token, setToken] = useState<string | null>(null);
     const [showAddModal, setShowAddModal] = useState(false);
-    const [activeTab, setActiveTab] = useState<'instances' | 'users'>('instances');
+    const [activeTab, setActiveTab] = useState<'instances' | 'users' | 'requests'>('instances');
 
     // Form state
     const [name, setName] = useState('');
@@ -31,6 +34,7 @@ export default function AdminPage() {
     const [apiKey, setApiKey] = useState('');
     const [username, setUsername] = useState('');
     const [isAuthSource, setIsAuthSource] = useState(false);
+    const [rootFolderPath, setRootFolderPath] = useState('/music');
 
     useEffect(() => {
         const storedToken = localStorage.getItem('token');
@@ -58,6 +62,11 @@ export default function AdminPage() {
         return res.data;
     }, { enabled: !!token && activeTab === 'users' });
 
+    const { data: requests, isLoading: loadingRequests } = useQuery('requests', async () => {
+        const res = await api.get('/requests');
+        return res.data;
+    }, { enabled: !!token && activeTab === 'requests' });
+
     const createMutation = useMutation(async (data: any) => {
         return api.post('/instances', data);
     }, {
@@ -77,6 +86,24 @@ export default function AdminPage() {
         onSuccess: () => queryClient.invalidateQueries('instances')
     });
 
+    const updateStatusMutation = useMutation(async ({ id, status }: { id: string, status: string }) => {
+        return api.put(`/requests/${id}/status`, { status });
+    }, {
+        onSuccess: () => queryClient.invalidateQueries('requests')
+    });
+
+    const submitMutation = useMutation(async (id: string) => {
+        return api.post(`/requests/${id}/submit`);
+    }, {
+        onSuccess: () => {
+            queryClient.invalidateQueries('requests');
+            alert('Submitted to Lidarr successfully!');
+        },
+        onError: (error: any) => {
+            alert(error.response?.data?.message || 'Failed to submit to Lidarr. Make sure a target Lidarr server is configured.');
+        }
+    });
+
     const resetForm = () => {
         setName('');
         setType('navidrome');
@@ -84,17 +111,20 @@ export default function AdminPage() {
         setApiKey('');
         setUsername('');
         setIsAuthSource(false);
+        setRootFolderPath('/music');
     };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        const settings = type === 'lidarr' ? { rootFolderPath } : undefined;
         createMutation.mutate({
             name,
             type,
             baseUrl,
             apiKey,
             username: type === 'navidrome' ? username : undefined,
-            isAuthSource: type === 'navidrome' ? isAuthSource : false
+            isAuthSource: type === 'navidrome' ? isAuthSource : false,
+            settings
         });
     };
 
@@ -130,6 +160,12 @@ export default function AdminPage() {
                                 className={`px-6 py-2 rounded-xl text-sm font-semibold transition-all ${activeTab === 'users' ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-muted-foreground hover:text-white'}`}
                             >
                                 Users
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('requests')}
+                                className={`px-6 py-2 rounded-xl text-sm font-semibold transition-all ${activeTab === 'requests' ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-muted-foreground hover:text-white'}`}
+                            >
+                                Requests
                             </button>
                         </div>
                         {activeTab === 'instances' && (
@@ -186,6 +222,88 @@ export default function AdminPage() {
                                     </div>
                                 </div>
                             ))}
+                        </div>
+                    )
+                ) : activeTab === 'requests' ? (
+                    loadingRequests ? (
+                        <div className="flex justify-center py-20"><Loader2 className="animate-spin text-primary" size={40} /></div>
+                    ) : (
+                        <div className="glass overflow-hidden rounded-3xl border border-white/5">
+                            <table className="w-full text-left">
+                                <thead className="bg-white/5 border-b border-white/5 text-muted-foreground text-sm uppercase font-semibold">
+                                    <tr>
+                                        <th className="p-4">Artist / Album</th>
+                                        <th className="p-4">User</th>
+                                        <th className="p-4">Status</th>
+                                        <th className="p-4">Date</th>
+                                        <th className="p-4 text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                    {requests?.map((r: any) => (
+                                        <tr key={r.id} className="hover:bg-white/5 transition-all group">
+                                            <td className="p-4">
+                                                <div className="font-bold">{r.artistName}</div>
+                                                {r.albumName && <div className="text-xs text-muted-foreground">{r.albumName}</div>}
+                                            </td>
+                                            <td className="p-4 text-sm text-muted-foreground">
+                                                {r.user?.username || 'Unknown'}
+                                            </td>
+                                            <td className="p-4">
+                                                <span className={`px-3 py-1 rounded-full text-xs font-bold ${r.status === 'completed' ? 'bg-green-500/20 text-green-500' :
+                                                    r.status === 'approved' ? 'bg-blue-500/20 text-blue-500' :
+                                                        r.status === 'failed' ? 'bg-red-500/20 text-red-500' :
+                                                            'bg-yellow-500/20 text-yellow-500'
+                                                    }`}>
+                                                    {r.status}
+                                                </span>
+                                            </td>
+                                            <td className="p-4 text-sm text-muted-foreground">
+                                                {new Date(r.createdAt).toLocaleDateString()}
+                                            </td>
+                                            <td className="p-4 text-right">
+                                                <div className="flex justify-end gap-2">
+                                                    {r.status === 'pending' && (
+                                                        <button
+                                                            onClick={() => updateStatusMutation.mutate({ id: r.id, status: 'approved' })}
+                                                            className="bg-blue-600 hover:bg-blue-500 p-2 rounded-lg transition-all"
+                                                            title="Approve"
+                                                        >
+                                                            <Check size={16} />
+                                                        </button>
+                                                    )}
+                                                    {r.status === 'approved' && (
+                                                        <button
+                                                            onClick={() => submitMutation.mutate(r.id)}
+                                                            className="bg-green-600 hover:bg-green-500 p-2 rounded-lg transition-all flex items-center gap-2 px-3"
+                                                            title="Submit to Lidarr"
+                                                        >
+                                                            <Send size={16} />
+                                                            <span className="text-xs font-bold">Submit</span>
+                                                        </button>
+                                                    )}
+                                                    {r.status === 'pending' && (
+                                                        <button
+                                                            onClick={() => updateStatusMutation.mutate({ id: r.id, status: 'denied' })}
+                                                            className="bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white p-2 rounded-lg transition-all"
+                                                            title="Deny"
+                                                        >
+                                                            <XCircle size={16} />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {requests?.length === 0 && (
+                                        <tr>
+                                            <td colSpan={5} className="p-10 text-center text-muted-foreground">
+                                                No requests found
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
                         </div>
                     )
                 ) : (
@@ -312,6 +430,17 @@ export default function AdminPage() {
                                         </div>
                                     </div>
                                 </>
+                            )}
+                            {type === 'lidarr' && (
+                                <div>
+                                    <label className="text-sm font-medium text-muted-foreground mb-1 block">Root Folder Path</label>
+                                    <input
+                                        value={rootFolderPath} onChange={e => setRootFolderPath(e.target.value)}
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                                        placeholder="/data/music/" required
+                                    />
+                                    <p className="text-[10px] text-muted-foreground mt-1">The path inside Lidarr where music is stored (e.g., /data/music/)</p>
+                                </div>
                             )}
 
                             <div className="flex gap-4 pt-4">

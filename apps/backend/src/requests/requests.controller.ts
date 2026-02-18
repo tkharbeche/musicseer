@@ -11,7 +11,7 @@ import { Roles } from '../auth/roles.decorator';
 export class RequestsController {
     constructor(private readonly requestsService: RequestsService) { }
 
-    @Post('artist')
+    @Post()
     create(@Request() req: any, @Body() createRequestDto: CreateRequestDto) {
         return this.requestsService.create(req.user.id, createRequestDto);
     }

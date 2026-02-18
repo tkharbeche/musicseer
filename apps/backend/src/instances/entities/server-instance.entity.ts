@@ -26,6 +26,9 @@ export class ServerInstance {
     @Column({ default: false, name: 'is_auth_source' })
     isAuthSource: boolean;
 
+    @Column({ type: 'jsonb', nullable: true })
+    settings?: Record<string, any>;
+
     @CreateDateColumn({ name: 'created_at' })
     createdAt: Date;
 

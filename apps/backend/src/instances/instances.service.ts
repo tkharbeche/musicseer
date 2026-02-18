@@ -131,4 +131,10 @@ export class InstancesService {
             where: { type: 'navidrome', isAuthSource: true, isActive: true },
         });
     }
+
+    async findFirstLidarrInstance(): Promise<ServerInstance | null> {
+        return this.instanceRepository.findOne({
+            where: { type: 'lidarr', isActive: true },
+        });
+    }
 }
