@@ -7,6 +7,7 @@ import { User } from './entities/user.entity';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { NavidromeService } from '../instances/services/navidrome.service';
+import { InstancesService } from '../instances/instances.service';
 import { ServerInstance } from '../instances/entities/server-instance.entity';
 
 @Injectable()
@@ -16,10 +17,9 @@ export class AuthService {
     constructor(
         @InjectRepository(User)
         private readonly userRepository: Repository<User>,
-        @InjectRepository(ServerInstance)
-        private readonly serverRepository: Repository<ServerInstance>,
         private readonly jwtService: JwtService,
         private readonly navidromeService: NavidromeService,
+        private readonly instancesService: InstancesService,
     ) { }
 
     async register(registerDto: RegisterDto): Promise<{ user: Partial<User>; access_token: string }> {
@@ -84,9 +84,7 @@ export class AuthService {
 
         // 2. Try Navidrome auth if local fails or doesn't exist
         if (!isAuthenticated) {
-            const authSource = await this.serverRepository.findOne({
-                where: { type: 'navidrome', isAuthSource: true, isActive: true },
-            });
+            const authSource = await this.instancesService.getAuthSource();
 
             if (authSource) {
                 try {

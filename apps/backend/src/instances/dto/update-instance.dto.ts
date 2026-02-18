@@ -22,4 +22,8 @@ export class UpdateInstanceDto {
     @IsOptional()
     @IsBoolean()
     isActive?: boolean;
+
+    @IsOptional()
+    @IsBoolean()
+    isAuthSource?: boolean;
 }
