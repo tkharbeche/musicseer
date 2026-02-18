@@ -125,4 +125,10 @@ export class InstancesService {
             return { success: false, message: error.message };
         }
     }
+
+    async getAuthSource(): Promise<ServerInstance | null> {
+        return this.instanceRepository.findOne({
+            where: { type: 'navidrome', isAuthSource: true, isActive: true },
+        });
+    }
 }

@@ -152,12 +152,17 @@ export class RecommendationService {
      * Get "Hidden Gems" - Highly similar but low global popularity
      */
     async getHiddenGems(userId: string, limit: number = 20): Promise<any[]> {
-        const recommendations = await this.getRecommendations(userId, limit * 3);
+        // We want high similarity but low listeners/playcount
+        // Let's generate candidates but use a different scoring formula
+        const recommendations = await this.getRecommendations(userId, limit * 5);
 
         const gems = recommendations
-            .filter(r => r.score > 0.3) // Must be somewhat relevant
+            .filter(r => r.score > 0.2) // Must be somewhat relevant
             .sort((a, b) => {
-                return b.score - a.score;
+                // Heuristic: high score is good, but we penalize popularity heavily here
+                // Note: 'score' already includes popularity (40%).
+                // For hidden gems, we want to favor the similarity component.
+                return b.similarityScore - a.similarityScore;
             })
             .slice(0, limit);
 

@@ -1,4 +1,4 @@
-import { IsString, IsEnum, IsUrl, IsOptional, MinLength } from 'class-validator';
+import { IsString, IsEnum, IsUrl, IsOptional, MinLength, IsBoolean } from 'class-validator';
 
 export class CreateInstanceDto {
     @IsString()
@@ -18,4 +18,12 @@ export class CreateInstanceDto {
     @IsOptional()
     @IsString()
     username?: string;
+
+    @IsOptional()
+    @IsBoolean()
+    isActive?: boolean;
+
+    @IsOptional()
+    @IsBoolean()
+    isAuthSource?: boolean;
 }

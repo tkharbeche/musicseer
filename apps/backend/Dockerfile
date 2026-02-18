@@ -37,10 +37,8 @@ CMD ["pnpm", "--filter", "backend", "dev"]
 
 # Production build stage
 FROM base AS builder
-# Ensure a clean state for the build
-RUN rm -rf apps/backend/dist packages/shared-types/dist
 # Build shared packages first
-RUN pnpm --filter "shared-types" build
+RUN pnpm --filter "@musicseer/*" build
 RUN pnpm --filter backend build
 
 # Production stage

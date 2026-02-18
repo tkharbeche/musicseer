@@ -24,6 +24,7 @@ services:
     build:
       context: .
       dockerfile: apps/backend/Dockerfile
+      target: development
     container_name: musicseer-backend
     restart: unless-stopped
     env_file:
@@ -45,6 +46,7 @@ services:
     build:
       context: .
       dockerfile: apps/frontend/Dockerfile
+      target: development
     container_name: musicseer-frontend
     restart: unless-stopped
     environment:

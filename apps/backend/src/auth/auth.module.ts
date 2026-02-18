@@ -8,10 +8,14 @@ import { AuthController } from './auth.controller';
 import { User } from './entities/user.entity';
 import { JwtStrategy } from './jwt.strategy';
 
+import { InstancesModule } from '../instances/instances.module';
+import { ServerInstance } from '../instances/entities/server-instance.entity';
+
 @Module({
     imports: [
         TypeOrmModule.forFeature([User]),
         PassportModule,
+        InstancesModule,
         JwtModule.registerAsync({
             imports: [ConfigModule],
             useFactory: async (configService: ConfigService) => ({

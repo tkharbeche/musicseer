@@ -11,6 +11,6 @@ import { LidarrService } from './services/lidarr.service';
     imports: [TypeOrmModule.forFeature([ServerInstance, UserServerMapping])],
     controllers: [InstancesController],
     providers: [InstancesService, NavidromeService, LidarrService],
-    exports: [InstancesService, LidarrService],
+    exports: [InstancesService, LidarrService, NavidromeService, TypeOrmModule],
 })
 export class InstancesModule { }
