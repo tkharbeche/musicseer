@@ -1,4 +1,4 @@
-import { IsString, IsEnum, IsUrl, IsOptional, MinLength, IsBoolean } from 'class-validator';
+import { IsString, IsEnum, IsUrl, IsOptional, MinLength, IsBoolean, IsObject } from 'class-validator';
 
 export class CreateInstanceDto {
     @IsString()
@@ -26,4 +26,8 @@ export class CreateInstanceDto {
     @IsOptional()
     @IsBoolean()
     isAuthSource?: boolean;
+
+    @IsOptional()
+    @IsObject()
+    settings?: Record<string, any>;
 }
