@@ -6,6 +6,8 @@ import { ArtistCache } from '../entities/artist-cache.entity';
 import { TrendingCache } from '../entities/trending-cache.entity';
 import { LastfmService } from './lastfm.service';
 import { MusicbrainzService } from './musicbrainz.service';
+import { AudioDbService } from './audio-db.service';
+import { ImageResolverService } from './image-resolver.service';
 
 @Injectable()
 export class TrendingService {
@@ -18,6 +20,8 @@ export class TrendingService {
         private readonly trendingCacheRepository: Repository<TrendingCache>,
         private readonly lastfmService: LastfmService,
         private readonly musicbrainzService: MusicbrainzService,
+        private readonly audioDbService: AudioDbService,
+        private readonly imageResolver: ImageResolverService,
     ) { }
 
     /**
@@ -92,6 +96,15 @@ export class TrendingService {
                     });
                 }
 
+                // Trigger catch-up if image is from Last.fm or missing
+                if (!artistData?.imageUrl || this.imageResolver.isLastFmUrl(artistData.imageUrl)) {
+                    this.logger.debug(`Triggering image catch-up for ${t.artistName}`);
+                    // Trigger async update in background
+                    this.resolveAndSaveImage(t.artistName, t.artistMbid).catch(e =>
+                        this.logger.error(`Catch-up failed for ${t.artistName}: ${e.message}`)
+                    );
+                }
+
                 return {
                     rank: t.rank,
                     name: t.artistName,
@@ -147,7 +160,30 @@ export class TrendingService {
             }
         }
 
+        // Resolve high-quality image
+        const highResImage = await this.imageResolver.resolveArtistImage(artistCache.name, artistCache.mbid || undefined);
+        if (highResImage) {
+            artistCache.imageUrl = highResImage;
+        }
+
         artistCache.lastSyncedAt = new Date();
         await this.artistCacheRepository.save(artistCache);
+    }
+
+    /**
+     * Resolve and save image for a specific artist (used for catch-up)
+     */
+    private async resolveAndSaveImage(name: string, mbid?: string): Promise<void> {
+        const artist = await this.artistCacheRepository.findOne({
+            where: mbid ? { mbid } : { name },
+        });
+
+        if (!artist) return;
+
+        const imageUrl = await this.imageResolver.resolveArtistImage(name, mbid);
+        if (imageUrl && imageUrl !== artist.imageUrl) {
+            artist.imageUrl = imageUrl;
+            await this.artistCacheRepository.save(artist);
+        }
     }
 }
