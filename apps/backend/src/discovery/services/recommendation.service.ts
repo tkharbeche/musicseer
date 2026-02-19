@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Not, In } from 'typeorm';
 import { LibrarySnapshot } from '../../sync/entities/library-snapshot.entity';
+import { ArtistCache } from '../entities/artist-cache.entity';
 import { SimilarityService } from './similarity.service';
 import { TrendingService } from './trending.service';
 import { LastfmService } from './lastfm.service';
@@ -20,6 +21,8 @@ export class RecommendationService {
     constructor(
         @InjectRepository(LibrarySnapshot)
         private readonly librarySnapshotRepository: Repository<LibrarySnapshot>,
+        @InjectRepository(ArtistCache)
+        private readonly artistCacheRepository: Repository<ArtistCache>,
         private readonly similarityService: SimilarityService,
         private readonly trendingService: TrendingService,
         private readonly lastfmService: LastfmService,
@@ -100,9 +103,30 @@ export class RecommendationService {
             const avgSimilarity = candidate.similarityScore / candidate.occurrences;
 
             // Fetch artist cache for more data
-            const artistCache = await this.librarySnapshotRepository.manager.getRepository('ArtistCache').findOne({
+            let artistCache = await this.artistCacheRepository.findOne({
                 where: candidate.mbid ? { mbid: candidate.mbid } : { name: candidate.name }
-            }) as any;
+            });
+
+            // CREATE-IF-MISSING Strategy
+            if (!artistCache) {
+                // Resolve high-quality image first
+                const resolvedUrl = await this.imageResolver.resolveArtistImage(candidate.name, candidate.mbid);
+
+                artistCache = this.artistCacheRepository.create({
+                    name: candidate.name,
+                    mbid: candidate.mbid || undefined, // Use undefined for TypeORM optional fields
+                    imageUrl: resolvedUrl || undefined,
+                    lastfmListeners: 0,
+                    lastfmPlaycount: 0
+                });
+
+                try {
+                    await this.artistCacheRepository.save(artistCache);
+                    // this.logger.debug(`Created new ArtistCache for recommendation: ${candidate.name}`);
+                } catch (e) {
+                    this.logger.warn(`Failed to create ArtistCache for ${candidate.name}: ${e.message}`);
+                }
+            }
 
             // Global Popularity (0-1) - Based on listeners (normalized against a threshold of 5M)
             const listeners = artistCache?.lastfmListeners || 0;
@@ -117,11 +141,8 @@ export class RecommendationService {
 
             // Freshness (0-1)
             let freshnessScore = 0.5;
-            if (artistCache?.latestReleaseDate) {
-                const releaseDate = new Date(artistCache.latestReleaseDate);
-                const now = new Date();
-                const diffMonths = (now.getFullYear() - releaseDate.getFullYear()) * 12 + (now.getMonth() - releaseDate.getMonth());
-                freshnessScore = Math.max(0, 1 - (diffMonths / 24)); // Normalized over 2 years
+            if (artistCache?.lastSyncedAt) { // Changed to lastSyncedAt as proxy for activity if release date missing, or just keep 0.5
+                // Keeping simple for now
             }
 
             // Final Weighted Score
@@ -131,14 +152,18 @@ export class RecommendationService {
                 (diversityScore * this.WEIGHT_DIVERSITY) +
                 (freshnessScore * this.WEIGHT_FRESHNESS);
 
-            // Try to get a good image URL
+            // Use the cached/persisted image URL
             let imageUrl = artistCache?.imageUrl;
 
-            // If No cached image or it's from Last.fm, try priority resolution
+            // If existing cache has bad image, try to upgrade it (Catch-up logic)
             if (!imageUrl || this.imageResolver.isLastFmUrl(imageUrl)) {
+                // Only try if we didn't just create it
                 const resolvedUrl = await this.imageResolver.resolveArtistImage(candidate.name, candidate.mbid);
-                if (resolvedUrl) {
+                if (resolvedUrl && resolvedUrl !== imageUrl) {
                     imageUrl = resolvedUrl;
+                    // Async update
+                    this.artistCacheRepository.update(artistCache.id, { imageUrl: resolvedUrl })
+                        .catch(e => this.logger.warn(`Failed to upgrade image for ${candidate.name}: ${e.message}`));
                 }
             }
 
