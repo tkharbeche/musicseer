@@ -5,6 +5,7 @@ import { LibrarySnapshot } from '../../sync/entities/library-snapshot.entity';
 import { SimilarityService } from './similarity.service';
 import { TrendingService } from './trending.service';
 import { LastfmService } from './lastfm.service';
+import { ImageResolverService } from './image-resolver.service';
 
 @Injectable()
 export class RecommendationService {
@@ -22,6 +23,7 @@ export class RecommendationService {
         private readonly similarityService: SimilarityService,
         private readonly trendingService: TrendingService,
         private readonly lastfmService: LastfmService,
+        private readonly imageResolver: ImageResolverService,
     ) { }
 
     /**
@@ -129,8 +131,27 @@ export class RecommendationService {
                 (diversityScore * this.WEIGHT_DIVERSITY) +
                 (freshnessScore * this.WEIGHT_FRESHNESS);
 
+            // Try to get a good image URL
+            let imageUrl = artistCache?.imageUrl;
+
+            // If No cached image or it's from Last.fm, try priority resolution
+            if (!imageUrl || this.imageResolver.isLastFmUrl(imageUrl)) {
+                const resolvedUrl = await this.imageResolver.resolveArtistImage(candidate.name, candidate.mbid);
+                if (resolvedUrl) {
+                    imageUrl = resolvedUrl;
+                }
+            }
+
+            // Fallback to Last.fm image if available (and flatten it)
+            if (!imageUrl && candidate.image && Array.isArray(candidate.image)) {
+                const largeImg = candidate.image.find((img: any) => img.size === 'extralarge') ||
+                    candidate.image[candidate.image.length - 1];
+                imageUrl = largeImg?.['#text'];
+            }
+
             return {
                 ...candidate,
+                imageUrl,
                 score: finalScore,
                 genres: artistCache?.genres || [],
                 reason: `Similar to ${candidate.seedArtists.slice(0, 3).join(', ')}`

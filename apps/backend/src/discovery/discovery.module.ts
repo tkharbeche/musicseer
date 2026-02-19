@@ -8,6 +8,9 @@ import { LastfmService } from './services/lastfm.service';
 import { MusicbrainzService } from './services/musicbrainz.service';
 import { TrendingService } from './services/trending.service';
 import { SimilarityService } from './services/similarity.service';
+import { AudioDbService } from './services/audio-db.service';
+import { DeezerService } from './services/deezer.service';
+import { ImageResolverService } from './services/image-resolver.service';
 
 import { RecommendationController } from './recommendation.controller';
 import { RecommendationService } from './services/recommendation.service';
@@ -16,7 +19,7 @@ import { LibrarySnapshot } from '../sync/entities/library-snapshot.entity';
 @Module({
     imports: [TypeOrmModule.forFeature([ArtistCache, TrendingCache, SimilarityCache, LibrarySnapshot])],
     controllers: [DiscoveryController, RecommendationController],
-    providers: [LastfmService, MusicbrainzService, TrendingService, SimilarityService, RecommendationService],
-    exports: [TrendingService, LastfmService, SimilarityService, RecommendationService],
+    providers: [LastfmService, MusicbrainzService, TrendingService, SimilarityService, RecommendationService, AudioDbService, DeezerService, ImageResolverService],
+    exports: [TrendingService, LastfmService, SimilarityService, RecommendationService, AudioDbService, ImageResolverService],
 })
 export class DiscoveryModule { }

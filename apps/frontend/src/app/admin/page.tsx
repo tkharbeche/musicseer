@@ -17,7 +17,8 @@ import {
     User as UserIcon,
     FileText,
     Check,
-    Send
+    Send,
+    RefreshCcw
 } from 'lucide-react';
 
 export default function AdminPage() {
@@ -104,6 +105,18 @@ export default function AdminPage() {
         }
     });
 
+    const syncMutation = useMutation(async () => {
+        return api.post('/discovery/sync-now');
+    }, {
+        onSuccess: () => {
+            queryClient.invalidateQueries('trending');
+            alert('Global discovery sync triggered successfully! Images will update shortly.');
+        },
+        onError: (error: any) => {
+            alert(error.response?.data?.message || 'Failed to trigger sync');
+        }
+    });
+
     const resetForm = () => {
         setName('');
         setType('navidrome');
@@ -177,6 +190,14 @@ export default function AdminPage() {
                                 Add Instance
                             </button>
                         )}
+                        <button
+                            onClick={() => syncMutation.mutate()}
+                            disabled={syncMutation.isLoading}
+                            className="bg-white/5 hover:bg-white/10 text-white px-6 py-3 rounded-xl flex items-center gap-2 font-semibold transition-all border border-white/10"
+                        >
+                            {syncMutation.isLoading ? <Loader2 size={18} className="animate-spin" /> : <RefreshCcw size={18} />}
+                            Sync Discovery
+                        </button>
                     </div>
                 </header>
 
