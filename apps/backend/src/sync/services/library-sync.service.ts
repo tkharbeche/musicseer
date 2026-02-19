@@ -97,8 +97,19 @@ export class LibrarySyncService {
             snapshot.userId = userId;
             snapshot.serverId = serverId;
             snapshot.artistName = artist.name;
-            snapshot.artistMbid = artist.mbId || null; // Subsonic uses mbId
-            snapshot.playCount = artist.userRating || 0; // Fallback to 0 if playCount unavailable
+            snapshot.artistMbid = artist.mbId || null;
+
+            // Subsonic doesn't give play counts easily per artist, so we use starred status or rating
+            // If starred, we give it a high weight (100)
+            // If not starred but has rating, we use rating * 10
+            let weight = 0;
+            if (artist.starred) {
+                weight = 100;
+            } else if (artist.userRating) {
+                weight = artist.userRating * 10;
+            }
+
+            snapshot.playCount = weight;
             snapshot.snapshotAt = new Date();
             return snapshot;
         });

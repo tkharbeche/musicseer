@@ -18,7 +18,9 @@ import {
     FileText,
     Check,
     Send,
-    RefreshCcw
+    RefreshCcw,
+    Library,
+    Users
 } from 'lucide-react';
 
 export default function AdminPage() {
@@ -110,10 +112,23 @@ export default function AdminPage() {
     }, {
         onSuccess: () => {
             queryClient.invalidateQueries('trending');
-            alert('Global discovery sync triggered successfully! Images will update shortly.');
+            alert('Global metadata and charts sync triggered successfully!');
         },
         onError: (error: any) => {
             alert(error.response?.data?.message || 'Failed to trigger sync');
+        }
+    });
+
+    const syncLibraryMutation = useMutation(async () => {
+        return api.post('/sync/now');
+    }, {
+        onSuccess: () => {
+            queryClient.invalidateQueries('recommended');
+            queryClient.invalidateQueries('hiddenGems');
+            alert('Personal library sync triggered successfully! Your recommendations will update shortly.');
+        },
+        onError: (error: any) => {
+            alert(error.response?.data?.message || 'Failed to trigger library sync');
         }
     });
 
@@ -196,7 +211,15 @@ export default function AdminPage() {
                             className="bg-white/5 hover:bg-white/10 text-white px-6 py-3 rounded-xl flex items-center gap-2 font-semibold transition-all border border-white/10"
                         >
                             {syncMutation.isLoading ? <Loader2 size={18} className="animate-spin" /> : <RefreshCcw size={18} />}
-                            Sync Discovery
+                            Sync Metadata
+                        </button>
+                        <button
+                            onClick={() => syncLibraryMutation.mutate()}
+                            disabled={syncLibraryMutation.isLoading}
+                            className="bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-xl flex items-center gap-2 font-semibold transition-all shadow-lg shadow-primary/20"
+                        >
+                            {syncLibraryMutation.isLoading ? <Loader2 size={18} className="animate-spin text-white" /> : <Library size={18} />}
+                            Sync Libraries
                         </button>
                     </div>
                 </header>
